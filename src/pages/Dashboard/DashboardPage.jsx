@@ -10,7 +10,7 @@ const CATEGORIES = [
   { id: 'Indonesia Trends', name: 'Indonesia Trends', desc: 'Hits lokal paling rame di Indonesia', icon: <Radio size={20} /> },
   { id: 'Nostalgia < 2000', name: 'Nostalgia < 2000', desc: 'Hits legendaris era 70s, 80s, 90s Indo & Barat', icon: <History size={20} /> },
   { id: 'Artist', name: 'Artist Mode', desc: 'Tebak lagu dari artis favorit pilihan lo', icon: <Mic2 size={20} /> },
-  { id: 'My Songs', name: 'My Songs', desc: 'Lagu dari playlist & favorit Spotify lo', icon: <Library size={20} />, disabled: true }
+  { id: 'My Songs', name: 'My Songs', desc: 'Lagu dari library, top tracks & playlist Spotify lo', icon: <Library size={20} /> }
 ];
 
 const POPULAR_ARTISTS = [
@@ -510,6 +510,51 @@ export function DashboardPage({ user, onGameCreated, onJoinRoom }) {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* 2.3 My Songs Info (If My Songs Selected) */}
+        {category === 'My Songs' && (
+          <div style={{
+            backgroundColor: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '16px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                backgroundColor: user?.spotifyConnected ? 'rgba(29, 185, 84, 0.15)' : 'rgba(255, 68, 68, 0.15)',
+                color: user?.spotifyConnected ? 'var(--color-primary)' : 'var(--color-danger)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Library size={20} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-text-bright)' }}>
+                  {user?.spotifyConnected ? 'Akun Spotify Terhubung' : 'Spotify Belum Terhubung'}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
+                  {user?.spotifyConnected 
+                    ? `Spotinize akan mengambil lagu dari Top Tracks, Liked Songs & Playlist @${user?.username || 'kamu'}`
+                    : 'Hubungkan akun Spotify kamu terlebih dahulu di menu Profil untuk memainkan mode ini.'}
+                </div>
+              </div>
+            </div>
+            {user?.spotifyConnected && (
+              <span className="badge badge-green" style={{ fontSize: '0.75rem', padding: '3px 10px', flexShrink: 0 }}>
+                Akun Terhubung
+              </span>
+            )}
           </div>
         )}
 
