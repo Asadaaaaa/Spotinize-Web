@@ -7,7 +7,6 @@ import GamePage from './pages/Game/GamePage.jsx';
 import ProfilePage from './pages/Profile/ProfilePage.jsx';
 import FriendsPage from './pages/Friends/FriendsPage.jsx';
 import GlobalLeaderboardPage from './pages/Dashboard/GlobalLeaderboardPage.jsx';
-import SpotifyConnectModal from './components/SpotifyConnectModal.jsx';
 import NotificationDrawer from './components/NotificationDrawer.jsx';
 import NotificationToast from './components/NotificationToast.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
@@ -29,11 +28,10 @@ function getUsernameFromUrl() {
 }
 
 export function App() {
-  const { user, rawUser, isAuthenticated, requireSpotifyConnect, setAuthSession, refreshUser } = useAuth();
+  const { user, rawUser, isAuthenticated, setAuthSession, refreshUser } = useAuth();
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [activeGameId, setActiveGameId] = useState(null);
   const [lobbyGame, setLobbyGame] = useState(null);
-  const [isAuthenticatingSpotify, setIsAuthenticatingSpotify] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [authModal, setAuthModal] = useState(null); // 'LOGIN' | 'REGISTER' | null
   const [publicProfileUsername, setPublicProfileUsername] = useState(() => getUsernameFromUrl());
@@ -105,40 +103,6 @@ export function App() {
       socket.off('notification:new', handleNotificationNew);
     };
   }, [currentUser?.id, loadNotifications]);
-
-  // Check Spotify OAuth callback parameter (?code= & ?state=)
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    const state = urlParams.get('state');
-    const errorParam = urlParams.get('error');
-
-    if (errorParam) {
-      window.history.replaceState({}, document.title, '/');
-      setAuthError('Otorisasi Spotify dibatalkan atau ditolak.');
-      return;
-    }
-
-    if (code) {
-      setIsAuthenticatingSpotify(true);
-      window.history.replaceState({}, document.title, '/');
-      
-      ApiClient.post('/auth/spotify/callback', { code, state })
-        .then(data => {
-          if (data.user) {
-            setAuthSession(data.user, data.token);
-            setCurrentTab('dashboard');
-          }
-        })
-        .catch(err => {
-          console.error('OAuth callback failed:', err);
-          setAuthError('Gagal menghubungkan Spotify: ' + (err.response?.data?.error || err.message));
-        })
-        .finally(() => {
-          setIsAuthenticatingSpotify(false);
-        });
-    }
-  }, [setAuthSession]);
 
   // When game is created from Dashboard
   const handleGameCreated = (gameState) => {
@@ -234,17 +198,6 @@ export function App() {
 
   // Render current view
   const renderContent = () => {
-    if (isAuthenticatingSpotify) {
-      return (
-        <div className="container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px' }}>
-          <div className="spin" style={{ width: '36px', height: '36px', border: '3px solid rgba(29, 185, 84, 0.2)', borderTopColor: 'var(--color-primary)', borderRadius: '50%' }} />
-          <p style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--color-text-bright)' }}>
-            Menghubungkan Akun Spotify ke Spotinize...
-          </p>
-        </div>
-      );
-    }
-
     // Dedicated Profile Route (/user/:username)
     if (publicProfileUsername) {
       return (
@@ -413,16 +366,6 @@ export function App() {
           handleJoinByRoomCode(roomCode);
         }}
         onRefresh={loadNotifications}
-      />
-
-      {/* Mandatory Spotify Connect Modal */}
-      <SpotifyConnectModal
-        isOpen={requireSpotifyConnect && !publicProfileUsername}
-        user={rawUser}
-        onConnected={() => {
-          refreshUser();
-          setCurrentTab('dashboard');
-        }}
       />
     </div>
   );

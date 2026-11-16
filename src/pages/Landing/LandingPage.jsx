@@ -215,7 +215,7 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
             </p>
           </Card>
 
-          {/* Card 3: Spotify Connected */}
+          {/* Card 3: Katalog Hits Lengkap */}
           <Card style={{ padding: 'clamp(14px, 3vw, 22px)', display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{
               width: '40px',
@@ -231,10 +231,10 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
               <Music2 size={20} />
             </div>
             <h3 style={{ fontSize: 'clamp(0.95rem, 2.5vw, 1.15rem)', fontWeight: 800, marginBottom: '6px' }}>
-              Spotify Connected
+              Katalog Hits Lengkap
             </h3>
             <p style={{ fontSize: 'clamp(0.76rem, 2vw, 0.88rem)', color: 'var(--color-text-muted)', lineHeight: 1.45, margin: 0 }}>
-              Hubungkan akun Spotify untuk sinkronisasi profil, ranking global, dan akses jutaan lagu.
+              Tebak ribuan hits terpopuler mulai dari chart global, tren Indonesia, era nostalgia, hingga artis favorit lo.
             </p>
           </Card>
 
@@ -454,7 +454,7 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
               >
                 {submitting 
                   ? 'Memproses...' 
-                  : (authModal === 'REGISTER' ? 'Daftar & Lanjut ke Spotify' : 'Masuk Sekarang')}
+                  : (authModal === 'REGISTER' ? 'Daftar Sekarang' : 'Masuk Sekarang')}
               </Button>
             </form>
 

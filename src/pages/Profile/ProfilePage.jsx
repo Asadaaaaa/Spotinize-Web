@@ -207,25 +207,6 @@ export function ProfilePage({ user: authUser, targetUsername, onStartDuel, onBac
                 boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
               }}
             />
-            {profileData?.spotifyConnected && (
-              <div 
-                title="Akun Spotify Terhubung"
-                style={{
-                  position: 'absolute',
-                  bottom: '2px',
-                  right: '2px',
-                  backgroundColor: '#000',
-                  borderRadius: '50%',
-                  padding: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.6)'
-                }}
-              >
-                <SpotifyIcon size={16} />
-              </div>
-            )}
           </div>
 
           {/* User Info */}

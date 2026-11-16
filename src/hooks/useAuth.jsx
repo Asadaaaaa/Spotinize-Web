@@ -95,8 +95,8 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user,
       token,
-      isAuthenticated: !!user && !!user.spotifyConnected,
-      requireSpotifyConnect: !!user && !user.spotifyConnected,
+      isAuthenticated: !!user,
+      requireSpotifyConnect: false,
       rawUser: user,
       isLoading,
       register,

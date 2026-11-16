@@ -185,7 +185,7 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
               onClick={() => setIsInviteOpen(true)}
               icon={<Users size={16} />}
             >
-              Ajak Teman Spotify
+              Ajak Teman
             </Button>
           </div>
         </Card>
