@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, Check, Users, Play, LogOut, Share2, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import { Copy, Check, Users, Play, LogOut, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import FriendInviteModal from '../../components/FriendInviteModal.jsx';
@@ -9,12 +9,18 @@ import ApiClient from '../../services/api.js';
 
 export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
   const [game, setGame] = useState(initialGame);
-  const [players, setPlayers] = useState(initialGame.leaderboard || []);
+  const [players, setPlayers] = useState(initialGame?.leaderboard || []);
   const [copied, setCopied] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [togglingReady, setTogglingReady] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setGame(initialGame);
+    setPlayers(initialGame?.leaderboard || []);
+  }, [initialGame]);
 
   const isHost = game?.hostId === user?.id;
 
@@ -27,15 +33,46 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
   }, [players, user?.id, isHost]);
 
   useEffect(() => {
-    if (!game?.id) return;
+    if (!game?.id || !user?.id) return;
     const socket = socketService.getSocket();
 
-    socket.emit('game:join_room', { gameId: game.id, userId: user.id });
+    const joinLobbyRoom = () => {
+      socket.emit('game:join_room', { gameId: game.id });
+    };
 
-    const handleLobbyUpdate = ({ players: updatedPlayers }) => {
-      if (updatedPlayers && Array.isArray(updatedPlayers)) {
+    joinLobbyRoom();
+
+    const handleSocketConnect = async () => {
+      joinLobbyRoom();
+      try {
+        const fresh = await ApiClient.get(`/game/${game.id}`);
+        if (fresh.status === 'PLAYING') {
+          onGameStarted(game.id);
+          return;
+        }
+        setGame(fresh);
+        if (Array.isArray(fresh.leaderboard)) {
+          setPlayers(fresh.leaderboard);
+        }
+      } catch (e) {}
+    };
+
+    const handleLobbyUpdate = ({ players: updatedPlayers, hostId, status }) => {
+      if (Array.isArray(updatedPlayers)) {
         setPlayers(updatedPlayers);
       }
+      if (hostId || status) {
+        setGame(prev => prev ? {
+          ...prev,
+          ...(hostId ? { hostId } : {}),
+          ...(status ? { status } : {})
+        } : prev);
+      }
+    };
+
+    const handlePlayerLeft = ({ userId: leftUserId }) => {
+      if (!leftUserId) return;
+      setPlayers(prev => prev.filter(p => p.userId !== leftUserId));
     };
 
     const handleGameStarted = () => {
@@ -43,18 +80,20 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
     };
 
     const handleSocketError = ({ message }) => {
-      setError(message);
+      if (message) setError(message);
       setStarting(false);
     };
 
+    socket.on('connect', handleSocketConnect);
     socket.on('lobby:update', handleLobbyUpdate);
-    socket.on('game:player_joined', handleLobbyUpdate);
+    socket.on('player:left', handlePlayerLeft);
     socket.on('game:started', handleGameStarted);
     socket.on('error', handleSocketError);
 
     return () => {
+      socket.off('connect', handleSocketConnect);
       socket.off('lobby:update', handleLobbyUpdate);
-      socket.off('game:player_joined', handleLobbyUpdate);
+      socket.off('player:left', handlePlayerLeft);
       socket.off('game:started', handleGameStarted);
       socket.off('error', handleSocketError);
     };
@@ -66,20 +105,34 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleToggleReady = () => {
+  const handleToggleReady = async () => {
+    if (togglingReady) return;
     try {
-      const socket = socketService.getSocket();
-      socket.emit('player:ready', { gameId: game.id, userId: user.id });
-    } catch (e) {}
+      setTogglingReady(true);
+      setError(null);
+      const res = await ApiClient.post(`/game/${game.id}/ready`);
+      if (res?.player) {
+        setIsReady(!!res.player.isReady);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTogglingReady(false);
+    }
   };
 
   const nonHostPlayers = players.filter(p => !p.isHost);
   const totalNonHost = nonHostPlayers.length;
   const readyCount = nonHostPlayers.filter(p => p.isReady).length;
-  const allReady = totalNonHost === 0 || nonHostPlayers.every(p => p.isReady);
+  const hasEnoughPlayers = players.length >= 2;
+  const allReady = hasEnoughPlayers && nonHostPlayers.every(p => p.isReady);
 
   const handleStartGame = async () => {
-    if (!allReady && totalNonHost > 0) {
+    if (!hasEnoughPlayers) {
+      setError('Minimal 2 pemain diperlukan untuk memulai game Multiplayer!');
+      return;
+    }
+    if (!allReady) {
       setError(`Menunggu semua pemain siap (${readyCount}/${totalNonHost} Siap)`);
       return;
     }
@@ -87,17 +140,8 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
     try {
       setStarting(true);
       setError(null);
-      
-      // Emit socket event to start multiplayer game and broadcast to all room members
-      const socket = socketService.getSocket();
-      socket.emit('game:start', { gameId: game.id, hostId: user.id });
-      
-      // Fallback: also trigger HTTP start if socket is transitioning
-      try {
-        await ApiClient.post(`/game/multiplayer/${game.id}/start`, { userId: user.id });
-      } catch (err) {
-        // If already started via socket, ignore error
-      }
+      await ApiClient.post(`/game/multiplayer/${game.id}/start`);
+      onGameStarted(game.id);
     } catch (err) {
       setError(err.message);
       setStarting(false);
@@ -106,9 +150,11 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
 
   const handleLeave = async () => {
     try {
-      await ApiClient.post(`/game/${game.id}/leave`, { userId: user.id });
+      await ApiClient.post(`/game/${game.id}/leave`);
+    } catch (e) {}
+    try {
       const socket = socketService.getSocket();
-      socket.emit('game:leave', { gameId: game.id, userId: user.id });
+      socket.emit('game:leave_room', { gameId: game.id });
     } catch (e) {}
     onLeave();
   };
@@ -208,7 +254,7 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
           <Card style={{ padding: '12px' }}>
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>Status Siap</div>
             <div style={{ fontWeight: 700, fontSize: '0.9rem', color: allReady ? 'var(--color-primary)' : 'var(--color-text-dim)' }}>
-              {totalNonHost === 0 ? 'Siap Main' : `${readyCount}/${totalNonHost} Siap`}
+              {totalNonHost === 0 ? 'Min. 2 Pemain' : `${readyCount}/${totalNonHost} Siap`}
             </div>
           </Card>
         </div>
@@ -245,6 +291,11 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>
                         {p.displayName} {isMe && '(You)'}
+                        {p.connectionStatus === 'DISCONNECTED' && (
+                          <span className="badge badge-red" style={{ marginLeft: '6px', fontSize: '0.65rem', padding: '2px 6px' }}>
+                            DC
+                          </span>
+                        )}
                       </div>
                       {p.isHost && (
                         <span className="badge badge-green" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
@@ -278,11 +329,16 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
               variant={isReady ? 'secondary' : 'primary'}
               size="lg"
               fullWidth
+              disabled={togglingReady}
               onClick={handleToggleReady}
-              icon={<Check size={20} />}
+              icon={togglingReady ? <Loader2 className="spin" size={20} /> : <Check size={20} />}
               style={{ height: '54px', fontSize: '1.15rem' }}
             >
-              {isReady ? 'Batal Siap (Cancel Ready)' : 'Saya Siap (Ready)'}
+              {togglingReady
+                ? 'Menyimpan...'
+                : isReady
+                  ? 'Batal Siap (Cancel Ready)'
+                  : 'Saya Siap (Ready)'}
             </Button>
           )}
 
@@ -303,8 +359,8 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
             >
               {starting
                 ? 'Memulai Game...'
-                : totalNonHost === 0
-                  ? 'Mulai Game'
+                : !hasEnoughPlayers
+                  ? 'Menunggu Pemain Lain...'
                   : !allReady
                     ? `Menunggu Pemain Siap (${readyCount}/${totalNonHost})`
                     : `Mulai Game (${players.length} Pemain Siap)`}

@@ -13,6 +13,8 @@ import { useAuth } from './hooks/useAuth.jsx';
 import ApiClient from './services/api.js';
 import socketService from './services/socket.js';
 
+const SPOTINIZE_SESSION_KEY = 'spotinize_active_session';
+
 function getUsernameFromUrl() {
   const path = window.location.pathname;
   if (path.startsWith('/user/')) {
@@ -27,10 +29,33 @@ function getUsernameFromUrl() {
   return null;
 }
 
+function getRoomCodeFromUrl() {
+  const match = window.location.pathname.match(/^\/room\/([A-Za-z0-9_-]+)/);
+  return match ? decodeURIComponent(match[1]).toUpperCase() : null;
+}
+
+function getGameIdFromUrl() {
+  const match = window.location.pathname.match(/^\/game\/([A-Za-z0-9_-]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function saveActiveSession(payload) {
+  try {
+    sessionStorage.setItem(SPOTINIZE_SESSION_KEY, JSON.stringify(payload));
+  } catch (e) {}
+}
+
+function clearActiveSession() {
+  try {
+    sessionStorage.removeItem(SPOTINIZE_SESSION_KEY);
+  } catch (e) {}
+}
+
 export function App() {
-  const { user, rawUser, isAuthenticated, setAuthSession, refreshUser } = useAuth();
+  const { user, rawUser, refreshUser } = useAuth();
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [activeGameId, setActiveGameId] = useState(null);
+  const [isActiveGameFinished, setIsActiveGameFinished] = useState(false);
   const [lobbyGame, setLobbyGame] = useState(null);
   const [authError, setAuthError] = useState(null);
   const [authModal, setAuthModal] = useState(null); // 'LOGIN' | 'REGISTER' | null
@@ -75,52 +100,148 @@ export function App() {
     loadNotifications();
   }, [loadNotifications]);
 
-  // Real-time Personal WebSocket Notifications & Invites
+  // Real-time Personal WebSocket Notifications & Invites (re-registers on reconnect)
   useEffect(() => {
     if (!currentUser?.id) return;
 
     const socket = socketService.getSocket();
 
-    // Register user personal channel
-    socket.emit('user:init', { userId: currentUser.id });
+    const handleConnect = () => {
+      socket.emit('user:init', { userId: currentUser.id });
+    };
 
-    // Handle incoming instant invitation
+    if (socket.connected) {
+      handleConnect();
+    }
+
     const handleInviteReceived = (inviteData) => {
       setActiveToastInvite(inviteData);
       loadNotifications();
     };
 
-    // Handle new general notification
     const handleNotificationNew = () => {
       loadNotifications();
     };
 
+    socket.on('connect', handleConnect);
     socket.on('invite:received', handleInviteReceived);
     socket.on('notification:new', handleNotificationNew);
 
     return () => {
+      socket.off('connect', handleConnect);
       socket.off('invite:received', handleInviteReceived);
       socket.off('notification:new', handleNotificationNew);
     };
   }, [currentUser?.id, loadNotifications]);
 
-  // When game is created from Dashboard
-  const handleGameCreated = (gameState) => {
+  // When game is created or resumed into active gameplay
+  const handleGameCreated = useCallback((gameState, replaceUrl = false) => {
+    if (!gameState?.id) return;
     setActiveGameId(gameState.id);
+    setLobbyGame(null);
+    setIsActiveGameFinished(Boolean(gameState.isFinished || gameState.status === 'FINISHED'));
     setCurrentTab('game');
-  };
+    saveActiveSession({ type: 'game', gameId: gameState.id });
 
-  // When multiplayer room is created or joined
-  const handleJoinRoom = (gameState) => {
+    const targetUrl = `/game/${encodeURIComponent(gameState.id)}`;
+    if (window.location.pathname !== targetUrl) {
+      if (replaceUrl) {
+        window.history.replaceState({}, '', targetUrl);
+      } else {
+        window.history.pushState({}, '', targetUrl);
+      }
+    }
+  }, []);
+
+  // When multiplayer room is created or joined (handles PLAYING rejoin directly into GamePage)
+  const handleJoinRoom = useCallback((gameState, replaceUrl = false) => {
+    if (!gameState?.id) return;
+    if (gameState.status === 'PLAYING' || gameState.status === 'STARTING' || gameState.status === 'FINISHED') {
+      handleGameCreated(gameState, replaceUrl);
+      return;
+    }
+
     setLobbyGame(gameState);
+    setActiveGameId(null);
+    setIsActiveGameFinished(false);
     setCurrentTab('room-lobby');
-  };
+    saveActiveSession({ type: 'room', roomCode: gameState.roomCode, gameId: gameState.id });
+
+    if (gameState.roomCode) {
+      const targetUrl = `/room/${encodeURIComponent(gameState.roomCode)}`;
+      if (window.location.pathname !== targetUrl) {
+        if (replaceUrl) {
+          window.history.replaceState({}, '', targetUrl);
+        } else {
+          window.history.pushState({}, '', targetUrl);
+        }
+      }
+    }
+  }, [handleGameCreated]);
+
+  // Session persistence & URL restore on mount/login
+  useEffect(() => {
+    if (!currentUser?.id || publicProfileUsername) return;
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      const urlRoomCode = getRoomCodeFromUrl();
+      const urlGameId = getGameIdFromUrl();
+
+      try {
+        if (urlRoomCode) {
+          const res = await ApiClient.post('/game/multiplayer/join', {
+            roomCode: urlRoomCode
+          });
+          if (!cancelled && res?.id) {
+            handleJoinRoom(res, true);
+          }
+          return;
+        }
+
+        if (urlGameId) {
+          const state = await ApiClient.get(`/game/${urlGameId}`);
+          if (!cancelled && state?.id) {
+            if (state.status === 'WAITING') {
+              handleJoinRoom(state, true);
+            } else if (state.status === 'ABANDONED') {
+              clearActiveSession();
+              window.history.replaceState({}, '', '/');
+            } else {
+              handleGameCreated(state, true);
+            }
+          }
+          return;
+        }
+
+        const { activeGame } = await ApiClient.get('/game/active');
+        if (!cancelled && activeGame?.id) {
+          if (activeGame.status === 'WAITING') {
+            handleJoinRoom(activeGame, true);
+          } else {
+            handleGameCreated(activeGame, true);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          clearActiveSession();
+          if (urlRoomCode || urlGameId) {
+            window.history.replaceState({}, '', '/');
+          }
+        }
+      }
+    };
+
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, publicProfileUsername, handleJoinRoom, handleGameCreated]);
 
   const handleJoinByRoomCode = async (roomCode) => {
     if (!currentUser?.id || !roomCode) return;
     try {
       const res = await ApiClient.post('/game/multiplayer/join', {
-        userId: currentUser.id,
         roomCode: roomCode.trim().toUpperCase()
       });
       handleJoinRoom(res);
@@ -138,7 +259,6 @@ export function App() {
 
     try {
       const res = await ApiClient.post('/game/multiplayer/create', {
-        userId: currentUser.id,
         category: 'Global Trends',
         numberOfSongs: 5
       });
@@ -155,7 +275,6 @@ export function App() {
           targetUserId: targetUser.id,
           roomCode: res.roomCode,
           gameId: res.id,
-          hostId: currentUser.id,
           hostName: currentUser.displayName,
           hostAvatar: currentUser.avatarUrl,
           category: 'Global Trends'
@@ -168,18 +287,44 @@ export function App() {
     }
   };
 
-  const handleGameStartedFromLobby = (gameId) => {
+  const handleGameStartedFromLobby = useCallback((gameId) => {
+    if (!gameId) return;
     setActiveGameId(gameId);
     setLobbyGame(null);
+    setIsActiveGameFinished(false);
     setCurrentTab('game');
-  };
+    saveActiveSession({ type: 'game', gameId });
+    const targetUrl = `/game/${encodeURIComponent(gameId)}`;
+    if (window.location.pathname !== targetUrl) {
+      window.history.replaceState({}, '', targetUrl);
+    }
+  }, []);
 
-  const handleExitGame = () => {
+  const handleLeaveLobby = useCallback(() => {
+    setLobbyGame(null);
+    setIsActiveGameFinished(false);
+    setCurrentTab('dashboard');
+    clearActiveSession();
+    if (window.location.pathname !== '/') {
+      window.history.pushState({}, '', '/');
+    }
+  }, []);
+
+  const handleExitGame = useCallback(() => {
     setActiveGameId(null);
     setLobbyGame(null);
+    setIsActiveGameFinished(false);
     setCurrentTab('dashboard');
+    clearActiveSession();
+    if (window.location.pathname !== '/') {
+      window.history.pushState({}, '', '/');
+    }
     refreshUser();
-  };
+  }, [refreshUser]);
+
+  const handleGameFinished = useCallback(() => {
+    setIsActiveGameFinished(true);
+  }, []);
 
   const handleNavigateToPublicProfile = (username) => {
     setPublicProfileUsername(username);
@@ -231,8 +376,8 @@ export function App() {
               </div>
             </div>
           )}
-          <LandingPage 
-            onStart={() => setCurrentTab('dashboard')} 
+          <LandingPage
+            onStart={() => setCurrentTab('dashboard')}
             authModal={authModal}
             setAuthModal={setAuthModal}
           />
@@ -246,6 +391,7 @@ export function App() {
           gameId={activeGameId}
           user={currentUser}
           onExitToDashboard={handleExitGame}
+          onGameFinished={handleGameFinished}
         />
       );
     }
@@ -256,18 +402,15 @@ export function App() {
           initialGame={lobbyGame}
           user={currentUser}
           onGameStarted={handleGameStartedFromLobby}
-          onLeave={() => {
-            setLobbyGame(null);
-            setCurrentTab('dashboard');
-          }}
+          onLeave={handleLeaveLobby}
         />
       );
     }
 
     if (currentTab === 'profile') {
       return (
-        <ProfilePage 
-          user={currentUser} 
+        <ProfilePage
+          user={currentUser}
           targetUsername={currentUser?.username}
           onStartDuel={handleStartDuelWithPlayer}
         />
@@ -312,15 +455,7 @@ export function App() {
           setIsNotificationOpen(true);
           loadNotifications();
         }}
-        onNavigate={(tab) => {
-          if (tab === 'profile' && currentUser?.username) {
-            handleNavigateToPublicProfile(currentUser.username);
-            return;
-          }
-          if (publicProfileUsername) {
-            setPublicProfileUsername(null);
-            window.history.pushState({}, '', '/');
-          }
+        onNavigate={async (tab) => {
           if (tab === 'login') {
             setAuthModal('LOGIN');
             return;
@@ -329,15 +464,46 @@ export function App() {
             setAuthModal('REGISTER');
             return;
           }
-          if (activeGameId) {
-            if (confirm('Game sedang berlangsung. Yakin mau keluar ke menu?')) {
-              setActiveGameId(null);
-              setLobbyGame(null);
-              setCurrentTab(tab);
+
+          const activeTargetId = (activeGameId && !isActiveGameFinished)
+            ? activeGameId
+            : (lobbyGame?.id || null);
+
+          if (activeTargetId) {
+            const msg = lobbyGame
+              ? 'Kamu sedang berada di Room Lobby. Yakin mau keluar?'
+              : 'Game sedang berlangsung. Yakin mau keluar ke menu?';
+            if (!confirm(msg)) {
+              return;
             }
-          } else {
-            setCurrentTab(tab);
+            try {
+              await ApiClient.post(`/game/${activeTargetId}/leave`);
+            } catch (e) {}
+            try {
+              socketService.getSocket().emit('game:leave_room', { gameId: activeTargetId });
+            } catch (e) {}
+            setActiveGameId(null);
+            setLobbyGame(null);
+            setIsActiveGameFinished(false);
+            clearActiveSession();
+            window.history.pushState({}, '', '/');
+          } else if (activeGameId && isActiveGameFinished) {
+            setActiveGameId(null);
+            setLobbyGame(null);
+            setIsActiveGameFinished(false);
+            clearActiveSession();
+            window.history.pushState({}, '', '/');
           }
+
+          if (tab === 'profile' && currentUser?.username) {
+            handleNavigateToPublicProfile(currentUser.username);
+            return;
+          }
+          if (publicProfileUsername) {
+            setPublicProfileUsername(null);
+            window.history.pushState({}, '', '/');
+          }
+          setCurrentTab(tab);
         }}
       />
 

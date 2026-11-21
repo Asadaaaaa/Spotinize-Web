@@ -50,21 +50,48 @@ export function useGame(gameId, user) {
     };
   }, []);
 
+  const stopTimer = useCallback(() => {
+    setIsTimerRunning(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+  }, []);
+
+  const startTimer = useCallback(() => {
+    if (!isTimerRunning && roundStatus === 'THINKING') {
+      startTimeRef.current = Date.now();
+      setIsTimerRunning(true);
+    }
+  }, [isTimerRunning, roundStatus]);
+
+  const resetRoundUI = useCallback(() => {
+    stopTimer();
+    setThinkingSeconds(0);
+    setRevealLevel(0.1);
+    setRemainingAttempts(3);
+    setRoundStatus('THINKING');
+    setFeedbackMessage(null);
+    setIsRoundResultOpen(false);
+    setRevealedTrack(null);
+    setIsAudioReady(true);
+    setIsAudioLoading(false);
+  }, [stopTimer]);
+
   // Fetch initial game state
   const loadGame = useCallback(async () => {
-    if (!gameId || !user?.id) return;
+    if (!gameId || !user?.id) return null;
     try {
       setLoading(true);
-      const state = await ApiClient.get(`/game/${gameId}?userId=${user.id}`);
-      if (!isMountedRef.current) return;
+      const state = await ApiClient.get(`/game/${gameId}`);
+      if (!isMountedRef.current) return null;
       setGameState(state);
       if (state.player) {
         setRevealLevel(state.player.currentRevealLevel || 0.1);
         setRemainingAttempts(state.player.remainingAttempts ?? 3);
         setRoundStatus(state.player.status || 'THINKING');
       }
+      return state;
     } catch (err) {
       if (isMountedRef.current) setError(err.message);
+      return null;
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
@@ -78,8 +105,16 @@ export function useGame(gameId, user) {
   useEffect(() => {
     if (hasPreloadedGameRef.current || !gameState) return;
 
-    const trackIds = gameState.gameTrackIds?.length 
-      ? gameState.gameTrackIds 
+    if (gameState.isFinished || gameState.status === 'FINISHED' || gameState.isWaitingForOthers) {
+      hasPreloadedGameRef.current = true;
+      setIsInitialGameReady(true);
+      setIsAudioReady(true);
+      setIsAudioLoading(false);
+      return;
+    }
+
+    const trackIds = gameState.gameTrackIds?.length
+      ? gameState.gameTrackIds
       : (gameState.currentTrack?.id ? [gameState.currentTrack.id] : []);
 
     if (trackIds.length === 0) return;
@@ -93,13 +128,10 @@ export function useGame(gameId, user) {
     const DURATIONS = [0.1, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0];
 
     const preloadAllTracks = async () => {
-      // Preload first track first for fastest start
       for (const trackId of trackIds) {
         try {
-          // Preload base 0.1s clue
           await audioPlayer.preload(`/api/audio/clue/${trackId}?duration=0.1`);
-          
-          // Preload other durations in background
+
           DURATIONS.slice(1).forEach(dur => {
             audioPlayer.preload(`/api/audio/clue/${trackId}?duration=${dur}`);
           });
@@ -118,7 +150,6 @@ export function useGame(gameId, user) {
         }
       }
 
-      // Small delay for smooth visual transition at 100%
       setTimeout(() => {
         if (!isMountedRef.current) return;
         setIsInitialGameReady(true);
@@ -130,25 +161,22 @@ export function useGame(gameId, user) {
     preloadAllTracks();
   }, [gameState]);
 
-  // Real-time Socket Subscriptions + Auto-Reconnect
+  // Real-time Socket Subscriptions + Auto-Reconnect + Clean Unmount
   useEffect(() => {
     if (!gameId || !user?.id) return;
 
     const socket = socketService.getSocket();
 
-    // Join the game room
     const joinRoom = () => {
-      socket.emit('game:join_room', { gameId, userId: user.id });
+      socket.emit('game:join_room', { gameId });
     };
 
     joinRoom();
 
-    // Auto-rejoin room on reconnect (crucial for mobile!)
     const handleReconnect = () => {
       console.log('[useGame] Socket reconnected, rejoining room...');
       joinRoom();
-      // Also emit reconnect event so server restores player state
-      socket.emit('player:reconnect', { gameId, userId: user.id });
+      socket.emit('player:reconnect', { gameId });
     };
 
     const handlePlayerReconnected = (state) => {
@@ -164,77 +192,117 @@ export function useGame(gameId, user) {
       }
     };
 
-    socket.on('connect', handleReconnect);
-    socket.on('player:reconnected', handlePlayerReconnected);
-
-    socket.on('score:update', ({ userId, score, status }) => {
+    const handleScoreUpdate = ({ userId: targetUserId, score, status, totalThinkingTime }) => {
       if (!isMountedRef.current) return;
       setGameState(prev => {
         if (!prev) return prev;
         const updatedLeaderboard = prev.leaderboard.map(p =>
-          p.userId === userId ? { ...p, score, status } : p
+          p.userId === targetUserId
+            ? {
+                ...p,
+                score,
+                status,
+                ...(typeof totalThinkingTime === 'number' ? { totalThinkingTime } : {})
+              }
+            : p
         );
         return { ...prev, leaderboard: updatedLeaderboard };
       });
-    });
+    };
 
-    socket.on('ranking:update', ({ leaderboard }) => {
+    const handleRankingUpdate = ({ leaderboard }) => {
       if (!isMountedRef.current) return;
       setGameState(prev => prev ? { ...prev, leaderboard } : prev);
-    });
+    };
 
-    socket.on('status:update', ({ userId, status }) => {
+    const handleStatusUpdate = ({ userId: targetUserId, status, currentRound }) => {
       if (!isMountedRef.current) return;
       setGameState(prev => {
         if (!prev) return prev;
         const updated = prev.leaderboard.map(p =>
-          p.userId === userId ? { ...p, status } : p
+          p.userId === targetUserId
+            ? {
+                ...p,
+                status,
+                ...(typeof currentRound === 'number' ? { currentRound } : {})
+              }
+            : p
         );
         return { ...prev, leaderboard: updated };
       });
-    });
+    };
 
-    socket.on('game:round:start', ({ currentRound }) => {
+    const handlePlayerStatusChange = ({ userId: targetUserId, connectionStatus }) => {
       if (!isMountedRef.current) return;
-      loadGame();
-      resetRoundUI();
-    });
+      setGameState(prev => {
+        if (!prev) return prev;
+        const updated = prev.leaderboard.map(p =>
+          p.userId === targetUserId ? { ...p, connectionStatus } : p
+        );
+        return { ...prev, leaderboard: updated };
+      });
+    };
 
-    socket.on('game:finish', ({ leaderboard, winner }) => {
+    const handlePlayerLeft = ({ userId: targetUserId }) => {
       if (!isMountedRef.current) return;
-      // Re-fetch full state from server to get accurate player score
-      ApiClient.get(`/game/${gameId}?userId=${user.id}`).then(freshState => {
+      setGameState(prev => {
+        if (!prev) return prev;
+        const updated = prev.leaderboard.map(p =>
+          p.userId === targetUserId ? { ...p, status: 'LEFT', connectionStatus: 'DISCONNECTED' } : p
+        );
+        return { ...prev, leaderboard: updated };
+      });
+    };
+
+    const handleGameFinish = ({ leaderboard, winner }) => {
+      if (!isMountedRef.current) return;
+      setIsRoundResultOpen(false);
+      stopTimer();
+      ApiClient.get(`/game/${gameId}`).then(freshState => {
         if (!isMountedRef.current) return;
         setGameState({
           ...freshState,
           status: 'FINISHED',
           isFinished: true,
+          isWaitingForOthers: false,
           leaderboard: leaderboard || freshState.leaderboard,
           winner
         });
       }).catch(() => {
-        // Fallback: use socket data
+        if (!isMountedRef.current) return;
         setGameState(prev => prev ? {
           ...prev,
           status: 'FINISHED',
           isFinished: true,
+          isWaitingForOthers: false,
           leaderboard: leaderboard || prev.leaderboard,
           winner
         } : prev);
       });
-      stopTimer();
-    });
+    };
+
+    socket.on('connect', handleReconnect);
+    socket.on('player:reconnected', handlePlayerReconnected);
+    socket.on('score:update', handleScoreUpdate);
+    socket.on('ranking:update', handleRankingUpdate);
+    socket.on('status:update', handleStatusUpdate);
+    socket.on('player:status_change', handlePlayerStatusChange);
+    socket.on('player:left', handlePlayerLeft);
+    socket.on('game:finish', handleGameFinish);
 
     return () => {
       socket.off('connect', handleReconnect);
       socket.off('player:reconnected', handlePlayerReconnected);
-      socket.off('score:update');
-      socket.off('ranking:update');
-      socket.off('status:update');
-      socket.off('game:round:start');
-      socket.off('game:finish');
+      socket.off('score:update', handleScoreUpdate);
+      socket.off('ranking:update', handleRankingUpdate);
+      socket.off('status:update', handleStatusUpdate);
+      socket.off('player:status_change', handlePlayerStatusChange);
+      socket.off('player:left', handlePlayerLeft);
+      socket.off('game:finish', handleGameFinish);
+      socket.emit('game:leave_room', { gameId });
+      audioPlayer.cleanup();
     };
-  }, [gameId, user?.id, loadGame]);
+  }, [gameId, user?.id, stopTimer]);
 
   // Timer Tick
   useEffect(() => {
@@ -253,41 +321,13 @@ export function useGame(gameId, user) {
     };
   }, [isTimerRunning]);
 
-  const startTimer = () => {
-    if (!isTimerRunning && roundStatus === 'THINKING') {
-      startTimeRef.current = Date.now();
-      setIsTimerRunning(true);
-    }
-  };
-
-  const stopTimer = () => {
-    setIsTimerRunning(false);
-    if (timerRef.current) clearInterval(timerRef.current);
-  };
-
-  const resetRoundUI = () => {
-    stopTimer();
-    setThinkingSeconds(0);
-    setRevealLevel(0.1);
-    setRemainingAttempts(3);
-    setRoundStatus('THINKING');
-    setFeedbackMessage(null);
-    setIsRoundResultOpen(false);
-    setRevealedTrack(null);
-    setIsAudioReady(true);
-    setIsAudioLoading(false);
-  };
-
   // Play clue audio (Starts timer ONLY when audio actually plays)
   const playClue = async () => {
     if (!gameState?.currentTrack) return;
 
-    // Start timer at the exact instant playback triggers
     if (!isTimerRunning && roundStatus === 'THINKING') {
       startTimer();
-      ApiClient.post(`/game/${gameId}/timer/start`, { userId: user.id }).catch(() => {});
-      const socket = socketService.getSocket();
-      socket.emit('player:play', { gameId, userId: user.id, roundNumber: gameState.currentRound });
+      ApiClient.post(`/game/${gameId}/timer/start`).catch(() => {});
     }
 
     const clueAudioUrl = `/api/audio/clue/${gameState.currentTrack.id}?duration=${revealLevel}`;
@@ -299,14 +339,12 @@ export function useGame(gameId, user) {
     if (isPlayingAudio || revealLevel >= 5.0 || roundStatus !== 'THINKING') return;
 
     try {
-      const res = await ApiClient.post(`/game/${gameId}/reveal`, { userId: user.id });
+      const res = await ApiClient.post(`/game/${gameId}/reveal`);
       const nextLevel = res.player?.currentRevealLevel || revealLevel;
       setRevealLevel(nextLevel);
 
-      // Start timer if not running
       if (!isTimerRunning) startTimer();
 
-      // Audio auto-plays from 0.0s to new reveal level
       if (gameState?.currentTrack) {
         const clueAudioUrl = `/api/audio/clue/${gameState.currentTrack.id}?duration=${nextLevel}`;
         await audioPlayer.playClue(clueAudioUrl, nextLevel);
@@ -324,7 +362,6 @@ export function useGame(gameId, user) {
 
     try {
       const res = await ApiClient.post(`/game/${gameId}/guess`, {
-        userId: user.id,
         track: selectedTrack
       });
 
@@ -356,7 +393,7 @@ export function useGame(gameId, user) {
     stopTimer();
 
     try {
-      const res = await ApiClient.post(`/game/${gameId}/skip`, { userId: user.id });
+      const res = await ApiClient.post(`/game/${gameId}/skip`);
       setRoundStatus('SKIPPED');
       setRemainingAttempts(0);
       setRevealedTrack(res.targetTrack);
@@ -373,19 +410,23 @@ export function useGame(gameId, user) {
     setIsRoundResultOpen(false);
 
     const maxRetries = 3;
-    let lastErr = null;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const newState = await ApiClient.post(`/game/${gameId}/next`, { userId: user.id });
+        const newState = await ApiClient.post(`/game/${gameId}/next`);
         if (!isMountedRef.current) return;
         setGameState(newState);
+
+        if (newState.isFinished || newState.status === 'FINISHED' || newState.isWaitingForOthers) {
+          stopTimer();
+          setIsRoundResultOpen(false);
+          return;
+        }
+
         resetRoundUI();
-        return; // Success, exit
+        return;
       } catch (err) {
-        lastErr = err;
         console.warn(`[nextRound] Attempt ${attempt + 1} failed:`, err.message);
-        // Wait briefly before retry (exponential backoff)
         if (attempt < maxRetries - 1) {
           await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
         }
@@ -395,15 +436,19 @@ export function useGame(gameId, user) {
     // All retries failed — fallback: re-fetch state from server
     console.error('[nextRound] All retries failed, falling back to loadGame');
     try {
-      await loadGame();
-      if (isMountedRef.current) resetRoundUI();
+      const fallbackState = await loadGame();
+      if (!isMountedRef.current) return;
+      if (fallbackState && !fallbackState.isFinished && !fallbackState.isWaitingForOthers && fallbackState.player?.status === 'THINKING') {
+        resetRoundUI();
+      }
     } catch (e) {
-      // Last resort: show error but don't blank-screen
       if (isMountedRef.current) {
         setError('Koneksi terputus. Silakan refresh halaman.');
       }
     }
   };
+
+  const isWaitingForOthers = Boolean(gameState?.isWaitingForOthers);
 
   return {
     gameState,
@@ -423,6 +468,7 @@ export function useGame(gameId, user) {
     isTimerRunning,
     isRoundResultOpen,
     revealedTrack,
+    isWaitingForOthers,
     playClue,
     revealNext,
     submitGuess,

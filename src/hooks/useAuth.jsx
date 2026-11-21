@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import ApiClient from '../services/api.js';
+import socketService from '../services/socket.js';
 
 const AuthContext = createContext(null);
 
@@ -33,6 +34,7 @@ export function AuthProvider({ children }) {
       setToken(data.token);
       localStorage.setItem('spotinize_user', JSON.stringify(data.user));
       localStorage.setItem('spotinize_token', data.token);
+      socketService.refreshAuth();
       return data;
     } finally {
       setIsLoading(false);
@@ -47,6 +49,7 @@ export function AuthProvider({ children }) {
       setToken(data.token);
       localStorage.setItem('spotinize_user', JSON.stringify(data.user));
       localStorage.setItem('spotinize_token', data.token);
+      socketService.refreshAuth();
       return data;
     } finally {
       setIsLoading(false);
@@ -66,6 +69,7 @@ export function AuthProvider({ children }) {
     setToken(tokenData);
     localStorage.setItem('spotinize_user', JSON.stringify(userData));
     localStorage.setItem('spotinize_token', tokenData);
+    socketService.refreshAuth();
   };
 
   const logout = () => {
@@ -73,6 +77,7 @@ export function AuthProvider({ children }) {
     setToken(null);
     localStorage.removeItem('spotinize_user');
     localStorage.removeItem('spotinize_token');
+    socketService.disconnect();
   };
 
   const refreshUser = async () => {

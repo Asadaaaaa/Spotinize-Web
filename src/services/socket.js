@@ -14,8 +14,10 @@ class SocketService {
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         timeout: 20000,
-        // Mobile-friendly: allow polling fallback if websocket drops
         upgrade: true,
+        auth: (cb) => {
+          cb({ token: localStorage.getItem('spotinize_token') || null });
+        }
       });
 
       this.socket.on('connect', () => {
@@ -24,7 +26,6 @@ class SocketService {
 
       this.socket.on('disconnect', (reason) => {
         console.log('[Socket] Disconnected:', reason);
-        // If the server disconnected us, reconnect manually
         if (reason === 'io server disconnect') {
           this.socket.connect();
         }
@@ -56,6 +57,15 @@ class SocketService {
       return this.connect();
     }
     return this.socket;
+  }
+
+  refreshAuth() {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket.connect();
+    } else {
+      this.connect();
+    }
   }
 
   disconnect() {

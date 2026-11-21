@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, SkipForward, Clock, Heart, Volume2, Music, Loader2, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, SkipForward, Clock, Music, Loader2, ArrowLeft, CheckCircle2, Users } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import AudioCluePlayer from '../../components/AudioCluePlayer.jsx';
@@ -10,14 +10,13 @@ import RoundResultModal from '../Result/RoundResultModal.jsx';
 import FinalResultPage from '../Result/FinalResultPage.jsx';
 import useGame from '../../hooks/useGame.js';
 
-export function GamePage({ gameId, user, onExitToDashboard }) {
+export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
   const {
     gameState,
     loading,
     error,
     isInitialGameReady,
     initialProgress,
-    loadedTracksCount,
     isPlayingAudio,
     isAudioReady,
     isAudioLoading,
@@ -28,15 +27,21 @@ export function GamePage({ gameId, user, onExitToDashboard }) {
     thinkingSeconds,
     isRoundResultOpen,
     revealedTrack,
+    isWaitingForOthers,
     playClue,
     revealNext,
     submitGuess,
     skipRound,
-    nextRound,
-    setIsRoundResultOpen
+    nextRound
   } = useGame(gameId, user);
 
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (gameState?.isFinished || gameState?.status === 'FINISHED') {
+      onGameFinished?.();
+    }
+  }, [gameState?.isFinished, gameState?.status, onGameFinished]);
 
   if (loading && !gameState) {
     return (
@@ -71,6 +76,125 @@ export function GamePage({ gameId, user, onExitToDashboard }) {
   }
 
   const isMultiplayer = gameState?.mode === 'MULTIPLAYER';
+
+  // Dedicated waiting view for fastest player who finished all rounds in Multiplayer
+  if (isWaitingForOthers && !isRoundResultOpen) {
+    const remainingPlayersCount = (gameState?.leaderboard || []).filter(p =>
+      p.userId !== user?.id &&
+      p.status !== 'LEFT' &&
+      ((p.currentRound || 1) < (gameState?.numberOfSongs || 1) || p.status === 'THINKING')
+    ).length;
+
+    return (
+      <div className="container mobile-page-container" style={{ paddingTop: '20px', paddingBottom: '64px' }}>
+        <div className="game-layout-grid">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '640px', margin: '0 auto', width: '100%' }}>
+            <Card style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              padding: '36px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              gap: '16px'
+            }}>
+              <div style={{
+                width: '72px',
+                height: '72px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--color-primary-subtle)',
+                border: '2px solid var(--color-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-primary)'
+              }}>
+                <CheckCircle2 size={36} />
+              </div>
+
+              <div>
+                <span className="badge badge-green" style={{ marginBottom: '8px' }}>
+                  <Loader2 className="spin" size={12} /> Menunggu Pemain Lain
+                </span>
+                <h2 style={{ fontSize: '1.6rem', fontWeight: 900, marginBottom: '6px' }}>
+                  Semua Lagu Selesai!
+                </h2>
+                <p style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)' }}>
+                  Menunggu pemain lain menyelesaikan ronde terakhir...
+                </p>
+              </div>
+
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                backgroundColor: 'var(--color-bg-alt)',
+                border: '1px solid var(--color-border)',
+                fontSize: '0.85rem',
+                color: 'var(--color-text-muted)'
+              }}>
+                <Users size={15} color="var(--color-primary)" />
+                <span>
+                  {remainingPlayersCount > 0
+                    ? `${remainingPlayersCount} pemain masih menyelesaikan lagu`
+                    : 'Menghitung peringkat akhir...'}
+                </span>
+              </div>
+
+              <div style={{
+                width: '100%',
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '12px',
+                marginTop: '8px'
+              }}>
+                <div style={{
+                  backgroundColor: 'var(--color-bg-alt)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '14px'
+                }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginBottom: '4px' }}>Skor Kamu</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.6rem', fontWeight: 900, color: 'var(--color-primary)' }}>
+                    {gameState?.player?.score ?? 0}
+                  </div>
+                </div>
+
+                <div style={{
+                  backgroundColor: 'var(--color-bg-alt)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '14px'
+                }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginBottom: '4px' }}>Thinking Time</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.6rem', fontWeight: 900, color: 'var(--color-text-bright)' }}>
+                    {gameState?.player?.totalThinkingTime ?? 0}s
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {isMultiplayer && (
+            <div style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '16px'
+            }}>
+              <LiveLeaderboard
+                leaderboard={gameState.leaderboard}
+                currentUserId={user?.id}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mobile-page-container" style={{ paddingTop: '20px', paddingBottom: '64px' }}>
@@ -251,7 +375,7 @@ export function GamePage({ gameId, user, onExitToDashboard }) {
 
       {/* Preparing Game Modal Popup (Shows ONLY ONCE at game start until 100% ready) */}
       <PreparingGameModal
-        isOpen={!isInitialGameReady && !gameState?.isFinished}
+        isOpen={!isInitialGameReady && !gameState?.isFinished && !isWaitingForOthers}
         progress={initialProgress}
         category={gameState?.category || 'Global Trends'}
       />
