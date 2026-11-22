@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trophy, Users, User, LogOut, Flame, Bell } from 'lucide-react';
+import { Trophy, Users, User, LogOut, Disc3, Bell } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import Avatar from './Avatar.jsx';
 import Logo from './Logo.jsx';
@@ -62,7 +62,7 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
                 className={`btn btn-sm ${currentTab === 'dashboard' ? 'btn-secondary' : 'btn-ghost'}`}
                 onClick={() => onNavigate('dashboard')}
               >
-                <Flame size={16} />
+                <Disc3 size={16} />
                 <span>Main</span>
               </button>
 
@@ -199,7 +199,7 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
             className={`floating-nav-item ${currentTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => onNavigate('dashboard')}
           >
-            <Flame size={20} />
+            <Disc3 size={20} />
             <span>Main</span>
           </button>
 
