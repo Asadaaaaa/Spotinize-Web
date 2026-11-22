@@ -4,7 +4,7 @@ import Button from './Button.jsx';
 import Card from './Card.jsx';
 import ApiClient from '../services/api.js';
 
-export function LandingDemoSection({ onRegisterClick }) {
+export function LandingDemoSection({ onRegisterClick, ctaLabel = 'Daftar & Main Lengkap' }) {
   const [loading, setLoading] = useState(true);
   const [demoData, setDemoData] = useState(null);
   const [clueIndex, setClueIndex] = useState(0); // 0 (0.1s) to 5 (5.0s)
@@ -191,8 +191,11 @@ export function LandingDemoSection({ onRegisterClick }) {
         {/* Demo Header */}
         <div style={{ textAlign: 'center', marginBottom: '16px' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>
-            Demo game
+            Demo Game
           </h2>
+          <p style={{ fontSize: '0.78rem', color: 'var(--color-text-dim)', margin: '4px 0 0 0' }}>
+            Dengarkan potongan audio & tebak lagunya
+          </p>
         </div>
 
         {/* Vinyl / Album Art Disc Player */}
@@ -360,7 +363,7 @@ export function LandingDemoSection({ onRegisterClick }) {
               Pilih Jawaban yang Benar:
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
               {demoData.options.map(option => {
                 const isSelected = selectedOptionId === option.id;
                 let btnStyle = {
@@ -372,7 +375,9 @@ export function LandingDemoSection({ onRegisterClick }) {
                   textAlign: 'left',
                   transition: 'all 0.2s ease',
                   cursor: isSelected ? 'default' : 'pointer',
-                  minHeight: '52px'
+                  minHeight: '52px',
+                  minWidth: 0,
+                  width: '100%'
                 };
 
                 let variant = 'btn-secondary';
@@ -411,8 +416,8 @@ export function LandingDemoSection({ onRegisterClick }) {
         ) : (
           /* Result Feedback Card */
           <div style={{
-            backgroundColor: isSuccess ? 'rgba(29, 185, 84, 0.12)' : 'rgba(235, 87, 87, 0.12)',
-            border: `1px solid ${isSuccess ? 'var(--color-primary)' : 'var(--color-error)'}`,
+            backgroundColor: isSuccess ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
+            border: `1px solid ${isSuccess ? 'var(--color-primary)' : 'var(--color-danger)'}`,
             borderRadius: 'var(--radius-md)',
             padding: '16px',
             textAlign: 'center',
@@ -426,7 +431,7 @@ export function LandingDemoSection({ onRegisterClick }) {
               width: '38px',
               height: '38px',
               borderRadius: '50%',
-              backgroundColor: isSuccess ? 'var(--color-primary)' : 'var(--color-error)',
+              backgroundColor: isSuccess ? 'var(--color-primary)' : 'var(--color-danger)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -459,7 +464,7 @@ export function LandingDemoSection({ onRegisterClick }) {
                 icon={<ArrowRight size={15} />}
                 style={{ fontWeight: 800, padding: '8px 16px', fontSize: '0.85rem' }}
               >
-                Daftar & Main Lengkap
+                {ctaLabel}
               </Button>
 
               {!isSuccess && (

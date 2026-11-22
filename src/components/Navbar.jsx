@@ -27,7 +27,7 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
         }}>
           {/* Brand Logo on Left (Pure Text Typography) */}
           <div 
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => onNavigate('landing')}
             style={{
               display: 'flex',
               alignItems: 'center',

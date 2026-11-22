@@ -17,7 +17,7 @@ function InstagramIcon({ size = 16, color = '#E1306C' }) {
 }
 
 export function LandingPage({ onStart, authModal: externalAuthModal = null, setAuthModal: setExternalAuthModal = null }) {
-  const { register, login } = useAuth();
+  const { register, login, isAuthenticated } = useAuth();
   
   // Modal states: null | 'LOGIN' | 'REGISTER'
   const [internalAuthModal, setInternalAuthModal] = useState(null);
@@ -138,25 +138,39 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
           </p>
 
           <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={openRegister}
-              icon={<UserPlus size={20} />}
-              style={{ padding: '16px 36px', fontSize: '1.15rem', fontWeight: 800 }}
-            >
-              Daftar Akun Baru
-            </Button>
+            {isAuthenticated ? (
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={onStart}
+                icon={<Play size={20} fill="#000" />}
+                style={{ padding: '16px 36px', fontSize: '1.15rem', fontWeight: 800 }}
+              >
+                Mulai Main
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={openRegister}
+                  icon={<UserPlus size={20} />}
+                  style={{ padding: '16px 36px', fontSize: '1.15rem', fontWeight: 800 }}
+                >
+                  Daftar Akun Baru
+                </Button>
 
-            <Button
-              variant="secondary"
-              size="lg"
-              onClick={openLogin}
-              icon={<LogIn size={20} color="var(--color-primary)" />}
-              style={{ padding: '16px 30px', fontSize: '1.15rem', fontWeight: 700 }}
-            >
-              Masuk / Login
-            </Button>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={openLogin}
+                  icon={<LogIn size={20} color="var(--color-primary)" />}
+                  style={{ padding: '16px 30px', fontSize: '1.15rem', fontWeight: 700 }}
+                >
+                  Masuk / Login
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -264,7 +278,10 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
       </section>
 
       {/* Interactive 1-Song Quick Demo Section */}
-      <LandingDemoSection onRegisterClick={openRegister} />
+      <LandingDemoSection
+        onRegisterClick={isAuthenticated ? onStart : openRegister}
+        ctaLabel={isAuthenticated ? 'Lanjut Main Sekarang' : 'Daftar & Main Lengkap'}
+      />
       </div>
 
       {/* Credits & Footer */}

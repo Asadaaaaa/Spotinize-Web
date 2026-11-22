@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Search, SkipForward, Clock, Music, Loader2, ArrowLeft, CheckCircle2, Users } from 'lucide-react';
+import { Search, SkipForward, Clock, Music, Loader2, ArrowLeft, CheckCircle2, Users, Settings } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import AudioCluePlayer from '../../components/AudioCluePlayer.jsx';
 import SongSearchModal from '../../components/SongSearchModal.jsx';
 import LiveLeaderboard from '../../components/LiveLeaderboard.jsx';
 import PreparingGameModal from '../../components/PreparingGameModal.jsx';
+import InGameSettingsModal from '../../components/InGameSettingsModal.jsx';
 import RoundResultModal from '../Result/RoundResultModal.jsx';
 import FinalResultPage from '../Result/FinalResultPage.jsx';
 import useGame from '../../hooks/useGame.js';
+import ApiClient from '../../services/api.js';
+import socketService from '../../services/socket.js';
+import audioPlayer from '../../services/audioPlayer.js';
 
 export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
   const {
@@ -36,6 +40,21 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
   } = useGame(gameId, user);
 
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const handleQuitGame = async () => {
+    audioPlayer.stop();
+    try {
+      await ApiClient.post(`/game/${gameId}/leave`);
+    } catch (e) {}
+    try {
+      socketService.getSocket().emit('game:leave_room', { gameId });
+    } catch (e) {}
+    try {
+      sessionStorage.removeItem('spotinize_active_session');
+    } catch (e) {}
+    onExitToDashboard?.();
+  };
 
   useEffect(() => {
     if (gameState?.isFinished || gameState?.status === 'FINISHED') {
@@ -238,24 +257,42 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
               </span>
             </div>
 
-            {/* Attempts Dots (Section 26) */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-dim)', textTransform: 'uppercase' }}>
-                Kesempatan
-              </span>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                {[1, 2, 3].map(attemptNum => (
-                  <div
-                    key={attemptNum}
-                    style={{
-                      width: '10px',
-                      height: '10px',
-                      borderRadius: '50%',
-                      backgroundColor: attemptNum <= remainingAttempts ? 'var(--color-primary)' : 'var(--color-border)'
-                    }}
-                  />
-                ))}
+            {/* Attempts Dots (Section 26) & Settings Button */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-dim)', textTransform: 'uppercase' }}>
+                  Kesempatan
+                </span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {[1, 2, 3].map(attemptNum => (
+                    <div
+                      key={attemptNum}
+                      style={{
+                        width: '10px',
+                        height: '10px',
+                        borderRadius: '50%',
+                        backgroundColor: attemptNum <= remainingAttempts ? 'var(--color-primary)' : 'var(--color-border)'
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                className="btn btn-secondary btn-sm"
+                title="Pengaturan Game"
+                style={{
+                  padding: '8px',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  flexShrink: 0
+                }}
+              >
+                <Settings size={17} />
+              </button>
             </div>
           </div>
 
@@ -378,6 +415,14 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
         isOpen={!isInitialGameReady && !gameState?.isFinished && !isWaitingForOthers}
         progress={initialProgress}
         category={gameState?.category || 'Global Trends'}
+      />
+
+      {/* In-Game Settings Modal */}
+      <InGameSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        gameState={gameState}
+        onQuitGame={handleQuitGame}
       />
     </div>
   );

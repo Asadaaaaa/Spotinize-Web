@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Trophy, Flame, Zap, Award, Share2, Clock, History, Calendar, 
   LogOut, Edit3, Music, ExternalLink, Sparkles, CheckCircle2, User, Globe,
-  ArrowLeft, Play, Copy, Check, Loader2
+  ArrowLeft, Play, Copy, Check, Loader2, UserPlus, UserCheck, X
 } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import ShareInstagramModal from '../../components/ShareInstagramModal.jsx';
 import EditProfileModal from '../../components/EditProfileModal.jsx';
 import ApiClient from '../../services/api.js';
+import socketService from '../../services/socket.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
+import { useDialog } from '../../hooks/useDialog.jsx';
 import Avatar from '../../components/Avatar.jsx';
+import VinylArt from '../../components/VinylArt.jsx';
 
 function formatRelativeTime(dateString) {
   if (!dateString) return '';
@@ -35,6 +38,7 @@ function SpotifyIcon({ size = 16, color = '#1DB954' }) {
 
 export function ProfilePage({ user: authUser, targetUsername, onStartDuel, onBack }) {
   const { logout, updateUser } = useAuth();
+  const { showAlert, showConfirm } = useDialog();
   const [profileData, setProfileData] = useState(authUser || null);
   const [histories, setHistories] = useState([]);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -42,6 +46,8 @@ export function ProfilePage({ user: authUser, targetUsername, onStartDuel, onBac
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [friendStatus, setFriendStatus] = useState({ status: 'NONE', requestId: null });
+  const [friendBusy, setFriendBusy] = useState(false);
 
   // Determine if viewing own profile
   const isSelf = Boolean(
@@ -93,6 +99,61 @@ export function ProfilePage({ user: authUser, targetUsername, onStartDuel, onBac
   useEffect(() => {
     loadProfileData();
   }, [targetUsername, authUser?.id]);
+
+  const loadFriendStatus = useCallback(async () => {
+    if (!authUser?.id || isSelf || !profileData?.id) return;
+    try {
+      const res = await ApiClient.get(`/friends/status/${profileData.id}`);
+      setFriendStatus(res || { status: 'NONE', requestId: null });
+    } catch (e) {}
+  }, [authUser?.id, isSelf, profileData?.id]);
+
+  useEffect(() => {
+    loadFriendStatus();
+  }, [loadFriendStatus]);
+
+  useEffect(() => {
+    if (!authUser?.id || isSelf || !profileData?.id) return;
+    const socket = socketService.getSocket();
+    const handleUpdate = () => loadFriendStatus();
+    socket.on('friend:update', handleUpdate);
+    return () => socket.off('friend:update', handleUpdate);
+  }, [authUser?.id, isSelf, profileData?.id, loadFriendStatus]);
+
+  const handleFriendAction = async (action) => {
+    if (!profileData?.id || friendBusy) return;
+    if (action === 'remove') {
+      const confirmed = await showConfirm(`Hapus ${profileData.displayName} dari daftar teman?`, {
+        title: 'Hapus Teman',
+        variant: 'danger',
+        confirmText: 'Hapus',
+        cancelText: 'Batal'
+      });
+      if (!confirmed) return;
+    }
+    try {
+      setFriendBusy(true);
+      if (action === 'request') {
+        await ApiClient.post('/friends/request', { friendId: profileData.id });
+      } else if (action === 'accept') {
+        await ApiClient.post('/friends/accept', { requestId: friendStatus.requestId, requesterId: profileData.id });
+      } else if (action === 'reject') {
+        await ApiClient.post('/friends/reject', { requestId: friendStatus.requestId, requesterId: profileData.id });
+      } else if (action === 'cancel') {
+        await ApiClient.post('/friends/cancel', { requestId: friendStatus.requestId, friendId: profileData.id });
+      } else if (action === 'remove') {
+        await ApiClient.post('/friends/remove', { friendId: profileData.id });
+      }
+      await loadFriendStatus();
+    } catch (err) {
+      await showAlert(err.message || 'Gagal memperbarui status pertemanan', {
+        title: 'Gagal',
+        variant: 'danger'
+      });
+    } finally {
+      setFriendBusy(false);
+    }
+  };
 
   const handleProfileUpdated = (updatedUser) => {
     setProfileData(updatedUser);
@@ -271,6 +332,69 @@ export function ProfilePage({ user: authUser, targetUsername, onStartDuel, onBac
               </a>
             )}
 
+            {!isSelf && authUser?.id && (
+              <>
+                {friendStatus.status === 'NONE' && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={friendBusy}
+                    onClick={() => handleFriendAction('request')}
+                    icon={<UserPlus size={15} />}
+                  >
+                    Tambah Teman
+                  </Button>
+                )}
+
+                {friendStatus.status === 'PENDING_SENT' && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={friendBusy}
+                    onClick={() => handleFriendAction('cancel')}
+                    icon={<X size={15} />}
+                  >
+                    Batalkan Permintaan
+                  </Button>
+                )}
+
+                {friendStatus.status === 'PENDING_RECEIVED' && (
+                  <>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={friendBusy}
+                      onClick={() => handleFriendAction('accept')}
+                      icon={<Check size={15} />}
+                    >
+                      Terima Pertemanan
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={friendBusy}
+                      onClick={() => handleFriendAction('reject')}
+                      icon={<X size={15} />}
+                    >
+                      Tolak
+                    </Button>
+                  </>
+                )}
+
+                {friendStatus.status === 'ACCEPTED' && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={friendBusy}
+                    onClick={() => handleFriendAction('remove')}
+                    icon={<UserCheck size={15} color="var(--color-primary)" />}
+                  >
+                    Berteman ✓
+                  </Button>
+                )}
+              </>
+            )}
+
             {!isSelf && onStartDuel && (
               <Button
                 variant="primary"
@@ -322,17 +446,12 @@ export function ProfilePage({ user: authUser, targetUsername, onStartDuel, onBac
               overflow: 'hidden'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', overflow: 'hidden' }}>
-                <img
-                  src={profileData.favoriteSongCover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=160'}
+                <VinylArt
+                  src={profileData.favoriteSongCover}
                   alt={profileData.favoriteSongTitle}
-                  style={{
-                    width: '60px',
-                    height: '60px',
-                    borderRadius: '10px',
-                    objectFit: 'cover',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-                    flexShrink: 0
-                  }}
+                  size={60}
+                  borderRadius="10px"
+                  style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}
                 />
                 <div style={{ overflow: 'hidden' }}>
                   <div style={{
@@ -425,9 +544,14 @@ export function ProfilePage({ user: authUser, targetUsername, onStartDuel, onBac
             <Card style={{ padding: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-success)', marginBottom: '4px' }}>
                 <Award size={16} />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Win Rate</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Guess Rate</span>
               </div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 900 }}>{profileData?.winRate || 0}%</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 900 }}>{profileData?.guessRate ?? profileData?.winRate ?? 0}%</div>
+              {(profileData?.totalSongsPlayed || 0) > 0 && (
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-dim)', marginTop: '2px' }}>
+                  {profileData.totalSongsGuessed || 0}/{profileData.totalSongsPlayed} lagu benar
+                </div>
+              )}
             </Card>
           </div>
         </div>
@@ -463,7 +587,7 @@ export function ProfilePage({ user: authUser, targetUsername, onStartDuel, onBac
                       {h.category} {h.mode === 'MULTIPLAYER' && `(Rank #${h.rank || 1})`}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                      {h.mode} • {h.totalRounds} Lagu • {h.totalThinkingTime || 0}s thinking
+                      {h.mode} • {h.correctCount ?? 0}/{h.totalRounds} Benar • {h.totalThinkingTime || 0}s thinking
                     </div>
                   </div>
 

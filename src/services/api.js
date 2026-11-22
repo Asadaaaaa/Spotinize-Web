@@ -28,7 +28,24 @@ export class ApiClient {
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error || `HTTP error ${response.status}`);
+      const err = new Error(errData.error || `HTTP error ${response.status}`);
+      err.status = response.status;
+      err.code = errData.code || null;
+
+      if (
+        response.status === 401 &&
+        !endpoint.startsWith('/auth/login') &&
+        !endpoint.startsWith('/auth/register') &&
+        localStorage.getItem('spotinize_token')
+      ) {
+        window.dispatchEvent(
+          new CustomEvent('spotinize:auth-invalid', {
+            detail: { status: 401, code: errData.code || 'UNAUTHORIZED' }
+          })
+        );
+      }
+
+      throw err;
     }
 
     return await response.json();

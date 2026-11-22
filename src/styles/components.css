@@ -19,6 +19,13 @@
   white-space: nowrap;
 }
 
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -270,6 +277,158 @@
   }
 }
 
+/* Friends Page Layout & Cards */
+.friend-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.friend-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.friend-tab-label-mobile {
+  display: none;
+}
+
+.friend-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+}
+
+.friend-card-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+
+.friend-card-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.friend-card-avatar {
+  width: 48px !important;
+  height: 48px !important;
+  flex-shrink: 0;
+  display: block;
+}
+
+.friend-card-status-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--color-text-dim);
+  border: 2px solid var(--color-surface);
+}
+
+.friend-card-status-dot.online {
+  background-color: var(--color-primary);
+}
+
+.friend-card-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.friend-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.friend-card-name {
+  font-weight: 800;
+  font-size: 0.98rem;
+  color: var(--color-text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.friend-card-status-pill {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  font-weight: 700;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-dim);
+  border: 1px solid var(--color-border);
+}
+
+.friend-card-status-pill.online {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+  border-color: rgba(29, 185, 84, 0.3);
+}
+
+.friend-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+  font-size: 0.76rem;
+  color: var(--color-text-dim);
+}
+
+.friend-card-username {
+  color: var(--color-primary);
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-card-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.friend-card-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.friend-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.friend-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Mobile Floating Bottom Dock Navigation */
 .bottom-nav-floating {
   display: none;
@@ -349,5 +508,92 @@
   .btn-lg {
     padding: 12px 20px;
     font-size: 1rem;
+  }
+
+  .friend-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .friend-tab-btn {
+    width: 100%;
+    min-width: 0;
+    padding: 9px 6px;
+    font-size: 0.76rem;
+    gap: 4px;
+  }
+
+  .friend-tab-label-desktop {
+    display: none;
+  }
+
+  .friend-tab-label-mobile {
+    display: inline;
+  }
+
+  .friend-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .friend-card-profile {
+    gap: 12px;
+  }
+
+  .friend-card-avatar {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  .friend-card-top {
+    justify-content: space-between;
+  }
+
+  .friend-card-name {
+    font-size: 0.95rem;
+  }
+
+  .friend-card-meta {
+    gap: 3px 8px;
+    font-size: 0.74rem;
+  }
+
+  .friend-card-actions {
+    width: 100%;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border-subtle);
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .friend-card-actions .btn {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+  }
+
+  .friend-card-actions .friend-action-grow {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .friend-card-actions .friend-action-secondary {
+    flex-shrink: 0;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-bg-alt);
+  }
+}
+
+@media (max-width: 380px) {
+  .friend-tab-btn {
+    font-size: 0.72rem;
+    padding: 8px 4px;
+  }
+
+  .friend-tab-btn svg {
+    display: none;
   }
 }

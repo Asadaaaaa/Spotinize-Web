@@ -10,33 +10,55 @@ import GlobalLeaderboardPage from './pages/Dashboard/GlobalLeaderboardPage.jsx';
 import NotificationDrawer from './components/NotificationDrawer.jsx';
 import NotificationToast from './components/NotificationToast.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
+import { useDialog } from './hooks/useDialog.jsx';
 import ApiClient from './services/api.js';
 import socketService from './services/socket.js';
 
 const SPOTINIZE_SESSION_KEY = 'spotinize_active_session';
 
-function getUsernameFromUrl() {
+function getRouteFromLocation() {
   const path = window.location.pathname;
   if (path.startsWith('/user/')) {
     const segment = path.replace('/user/', '').split('/')[0];
-    if (segment) return decodeURIComponent(segment);
+    if (segment) return { tab: 'public-profile', username: decodeURIComponent(segment) };
   }
   const hash = window.location.hash;
   if (hash.startsWith('#/user/') || hash.startsWith('#user/')) {
     const segment = hash.replace(/#\/?user\//, '').split('/')[0];
-    if (segment) return decodeURIComponent(segment);
+    if (segment) return { tab: 'public-profile', username: decodeURIComponent(segment) };
   }
-  return null;
+  const roomMatch = path.match(/^\/room\/([A-Za-z0-9_-]+)/);
+  if (roomMatch) {
+    return { tab: 'room-lobby', roomCode: decodeURIComponent(roomMatch[1]).toUpperCase() };
+  }
+  const gameMatch = path.match(/^\/game\/([A-Za-z0-9_-]+)/);
+  if (gameMatch) {
+    return { tab: 'game', gameId: decodeURIComponent(gameMatch[1]) };
+  }
+  if (path === '/main' || path === '/main/') {
+    return { tab: 'dashboard' };
+  }
+  if (path === '/leaderboard' || path === '/leaderboard/') {
+    return { tab: 'leaderboard' };
+  }
+  if (path === '/friends' || path === '/friends/') {
+    return { tab: 'friends' };
+  }
+  return { tab: 'landing' };
 }
 
-function getRoomCodeFromUrl() {
-  const match = window.location.pathname.match(/^\/room\/([A-Za-z0-9_-]+)/);
-  return match ? decodeURIComponent(match[1]).toUpperCase() : null;
-}
-
-function getGameIdFromUrl() {
-  const match = window.location.pathname.match(/^\/game\/([A-Za-z0-9_-]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
+function getPathForTab(tab) {
+  switch (tab) {
+    case 'dashboard':
+      return '/main';
+    case 'leaderboard':
+      return '/leaderboard';
+    case 'friends':
+      return '/friends';
+    case 'landing':
+    default:
+      return '/';
+  }
 }
 
 function saveActiveSession(payload) {
@@ -52,14 +74,22 @@ function clearActiveSession() {
 }
 
 export function App() {
-  const { user, rawUser, refreshUser } = useAuth();
-  const [currentTab, setCurrentTab] = useState('dashboard');
+  const { user, rawUser, refreshUser, isAuthChecking } = useAuth();
+  const { showAlert, showConfirm } = useDialog();
+  const [currentTab, setCurrentTab] = useState(() => {
+    const route = getRouteFromLocation();
+    if (route.tab === 'public-profile') return 'dashboard';
+    return route.tab;
+  });
   const [activeGameId, setActiveGameId] = useState(null);
   const [isActiveGameFinished, setIsActiveGameFinished] = useState(false);
   const [lobbyGame, setLobbyGame] = useState(null);
   const [authError, setAuthError] = useState(null);
   const [authModal, setAuthModal] = useState(null); // 'LOGIN' | 'REGISTER' | null
-  const [publicProfileUsername, setPublicProfileUsername] = useState(() => getUsernameFromUrl());
+  const [publicProfileUsername, setPublicProfileUsername] = useState(() => {
+    const route = getRouteFromLocation();
+    return route.tab === 'public-profile' ? route.username : null;
+  });
 
   // Notification State
   const [notifications, setNotifications] = useState([]);
@@ -69,13 +99,16 @@ export function App() {
 
   const currentUser = user || rawUser;
 
-  // Handle URL change for /user/:username route
+  // Handle browser back/forward URL changes
   useEffect(() => {
     const handleUrlChange = () => {
-      const uname = getUsernameFromUrl();
-      if (uname) {
-        setPublicProfileUsername(uname);
+      const route = getRouteFromLocation();
+      if (route.tab === 'public-profile') {
+        setPublicProfileUsername(route.username);
+        return;
       }
+      setPublicProfileUsername(null);
+      setCurrentTab(route.tab);
     };
 
     window.addEventListener('popstate', handleUrlChange);
@@ -86,23 +119,48 @@ export function App() {
     };
   }, []);
 
+  // Redirect logged-out users away from protected routes back to '/'
+  useEffect(() => {
+    if (isAuthChecking || currentUser) return;
+    const path = window.location.pathname;
+    const isProtectedPath =
+      path === '/main' ||
+      path === '/main/' ||
+      path === '/leaderboard' ||
+      path === '/leaderboard/' ||
+      path === '/friends' ||
+      path === '/friends/' ||
+      path.startsWith('/room/') ||
+      path.startsWith('/game/');
+
+    if (isProtectedPath) {
+      setActiveGameId(null);
+      setLobbyGame(null);
+      setIsActiveGameFinished(false);
+      clearActiveSession();
+      setCurrentTab('landing');
+      window.history.replaceState({}, '', '/');
+    }
+  }, [currentUser, isAuthChecking]);
+
   // Load user notifications
   const loadNotifications = useCallback(async () => {
-    if (!currentUser?.id) return;
+    if (isAuthChecking || !currentUser?.id) return;
     try {
       const res = await ApiClient.get('/notifications');
       setNotifications(res.notifications || []);
       setUnreadCount(res.unreadCount || 0);
     } catch (e) {}
-  }, [currentUser?.id]);
+  }, [currentUser?.id, isAuthChecking]);
 
   useEffect(() => {
+    if (isAuthChecking) return;
     loadNotifications();
-  }, [loadNotifications]);
+  }, [loadNotifications, isAuthChecking]);
 
   // Real-time Personal WebSocket Notifications & Invites (re-registers on reconnect)
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (isAuthChecking || !currentUser?.id) return;
 
     const socket = socketService.getSocket();
 
@@ -132,7 +190,15 @@ export function App() {
       socket.off('invite:received', handleInviteReceived);
       socket.off('notification:new', handleNotificationNew);
     };
-  }, [currentUser?.id, loadNotifications]);
+  }, [currentUser?.id, isAuthChecking, loadNotifications]);
+
+  const handleGoToMain = useCallback(() => {
+    setPublicProfileUsername(null);
+    setCurrentTab('dashboard');
+    if (window.location.pathname !== '/main') {
+      window.history.pushState({}, '', '/main');
+    }
+  }, []);
 
   // When game is created or resumed into active gameplay
   const handleGameCreated = useCallback((gameState, replaceUrl = false) => {
@@ -181,12 +247,13 @@ export function App() {
 
   // Session persistence & URL restore on mount/login
   useEffect(() => {
-    if (!currentUser?.id || publicProfileUsername) return;
+    if (isAuthChecking || !currentUser?.id || publicProfileUsername) return;
     let cancelled = false;
 
     const restoreSession = async () => {
-      const urlRoomCode = getRoomCodeFromUrl();
-      const urlGameId = getGameIdFromUrl();
+      const route = getRouteFromLocation();
+      const urlRoomCode = route.tab === 'room-lobby' ? route.roomCode : null;
+      const urlGameId = route.tab === 'game' ? route.gameId : null;
 
       try {
         if (urlRoomCode) {
@@ -206,7 +273,8 @@ export function App() {
               handleJoinRoom(state, true);
             } else if (state.status === 'ABANDONED') {
               clearActiveSession();
-              window.history.replaceState({}, '', '/');
+              setCurrentTab('dashboard');
+              window.history.replaceState({}, '', '/main');
             } else {
               handleGameCreated(state, true);
             }
@@ -214,19 +282,23 @@ export function App() {
           return;
         }
 
-        const { activeGame } = await ApiClient.get('/game/active');
-        if (!cancelled && activeGame?.id) {
-          if (activeGame.status === 'WAITING') {
-            handleJoinRoom(activeGame, true);
-          } else {
-            handleGameCreated(activeGame, true);
+        // Only auto-restore active game when user is on /main
+        if (route.tab === 'dashboard') {
+          const { activeGame } = await ApiClient.get('/game/active');
+          if (!cancelled && activeGame?.id) {
+            if (activeGame.status === 'WAITING') {
+              handleJoinRoom(activeGame, true);
+            } else {
+              handleGameCreated(activeGame, true);
+            }
           }
         }
       } catch (err) {
         if (!cancelled) {
           clearActiveSession();
           if (urlRoomCode || urlGameId) {
-            window.history.replaceState({}, '', '/');
+            setCurrentTab('dashboard');
+            window.history.replaceState({}, '', '/main');
           }
         }
       }
@@ -236,7 +308,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.id, publicProfileUsername, handleJoinRoom, handleGameCreated]);
+  }, [currentUser?.id, isAuthChecking, publicProfileUsername, handleJoinRoom, handleGameCreated]);
 
   const handleJoinByRoomCode = async (roomCode) => {
     if (!currentUser?.id || !roomCode) return;
@@ -246,13 +318,19 @@ export function App() {
       });
       handleJoinRoom(res);
     } catch (err) {
-      alert('Gagal bergabung ke room: ' + err.message);
+      await showAlert('Gagal bergabung ke room: ' + err.message, {
+        title: 'Gagal Bergabung',
+        variant: 'danger'
+      });
     }
   };
 
   const handleStartDuelWithPlayer = async (targetUser) => {
     if (!currentUser?.id) {
-      alert('Silakan login terlebih dahulu untuk mengajak duel.');
+      await showAlert('Silakan login terlebih dahulu untuk mengajak duel.', {
+        title: 'Login Diperlukan',
+        variant: 'info'
+      });
       setAuthModal('LOGIN');
       return;
     }
@@ -283,7 +361,10 @@ export function App() {
 
       handleJoinRoom(res);
     } catch (e) {
-      alert('Gagal memulai room duel: ' + e.message);
+      await showAlert('Gagal memulai room duel: ' + e.message, {
+        title: 'Gagal Memulai Duel',
+        variant: 'danger'
+      });
     }
   };
 
@@ -305,8 +386,8 @@ export function App() {
     setIsActiveGameFinished(false);
     setCurrentTab('dashboard');
     clearActiveSession();
-    if (window.location.pathname !== '/') {
-      window.history.pushState({}, '', '/');
+    if (window.location.pathname !== '/main') {
+      window.history.pushState({}, '', '/main');
     }
   }, []);
 
@@ -316,8 +397,8 @@ export function App() {
     setIsActiveGameFinished(false);
     setCurrentTab('dashboard');
     clearActiveSession();
-    if (window.location.pathname !== '/') {
-      window.history.pushState({}, '', '/');
+    if (window.location.pathname !== '/main') {
+      window.history.pushState({}, '', '/main');
     }
     refreshUser();
   }, [refreshUser]);
@@ -333,13 +414,41 @@ export function App() {
 
   const handleExitPublicProfile = () => {
     setPublicProfileUsername(null);
-    window.history.pushState({}, '', '/');
     if (!currentUser) {
+      window.history.pushState({}, '', '/');
       setCurrentTab('landing');
     } else {
+      window.history.pushState({}, '', '/main');
       setCurrentTab('dashboard');
     }
   };
+
+  const renderLanding = () => (
+    <div>
+      {authError && (
+        <div className="container-narrow" style={{ paddingTop: '20px' }}>
+          <div style={{
+            backgroundColor: 'var(--color-danger-bg)',
+            border: '1px solid var(--color-danger)',
+            color: 'var(--color-danger)',
+            padding: '12px 16px',
+            borderRadius: 'var(--radius-md)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>{authError}</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => setAuthError(null)} style={{ padding: '4px 8px' }}>Tutup</button>
+          </div>
+        </div>
+      )}
+      <LandingPage
+        onStart={handleGoToMain}
+        authModal={authModal}
+        setAuthModal={setAuthModal}
+      />
+    </div>
+  );
 
   // Render current view
   const renderContent = () => {
@@ -355,34 +464,14 @@ export function App() {
       );
     }
 
+    // Landing Page at '/' (accessible even when logged in)
+    if (currentTab === 'landing') {
+      return renderLanding();
+    }
+
     // Not logged in -> Landing page
     if (!currentUser) {
-      return (
-        <div>
-          {authError && (
-            <div className="container-narrow" style={{ paddingTop: '20px' }}>
-              <div style={{
-                backgroundColor: 'var(--color-danger-bg)',
-                border: '1px solid var(--color-danger)',
-                color: 'var(--color-danger)',
-                padding: '12px 16px',
-                borderRadius: 'var(--radius-md)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <span>{authError}</span>
-                <button className="btn btn-ghost btn-sm" onClick={() => setAuthError(null)} style={{ padding: '4px 8px' }}>Tutup</button>
-              </div>
-            </div>
-          )}
-          <LandingPage
-            onStart={() => setCurrentTab('dashboard')}
-            authModal={authModal}
-            setAuthModal={setAuthModal}
-          />
-        </div>
-      );
+      return renderLanding();
     }
 
     if (currentTab === 'game' && activeGameId) {
@@ -473,7 +562,13 @@ export function App() {
             const msg = lobbyGame
               ? 'Kamu sedang berada di Room Lobby. Yakin mau keluar?'
               : 'Game sedang berlangsung. Yakin mau keluar ke menu?';
-            if (!confirm(msg)) {
+            const confirmed = await showConfirm(msg, {
+              title: lobbyGame ? 'Keluar Room Lobby' : 'Keluar Game',
+              variant: 'danger',
+              confirmText: 'Ya, Keluar',
+              cancelText: 'Batal'
+            });
+            if (!confirmed) {
               return;
             }
             try {
@@ -486,13 +581,11 @@ export function App() {
             setLobbyGame(null);
             setIsActiveGameFinished(false);
             clearActiveSession();
-            window.history.pushState({}, '', '/');
           } else if (activeGameId && isActiveGameFinished) {
             setActiveGameId(null);
             setLobbyGame(null);
             setIsActiveGameFinished(false);
             clearActiveSession();
-            window.history.pushState({}, '', '/');
           }
 
           if (tab === 'profile' && currentUser?.username) {
@@ -501,9 +594,14 @@ export function App() {
           }
           if (publicProfileUsername) {
             setPublicProfileUsername(null);
-            window.history.pushState({}, '', '/');
           }
-          setCurrentTab(tab);
+
+          const nextTab = !currentUser && tab !== 'landing' ? 'landing' : tab;
+          const targetPath = getPathForTab(nextTab);
+          if (window.location.pathname !== targetPath) {
+            window.history.pushState({}, '', targetPath);
+          }
+          setCurrentTab(nextTab);
         }}
       />
 

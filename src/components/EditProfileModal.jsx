@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import Button from './Button.jsx';
 import Avatar from './Avatar.jsx';
+import VinylArt from './VinylArt.jsx';
 import ApiClient from '../services/api.js';
 
 const AVATAR_PRESETS = [
@@ -83,6 +84,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
   const [isSearchingSong, setIsSearchingSong] = useState(false);
   const [isSongSearchOpen, setIsSongSearchOpen] = useState(false);
   const searchTimeoutRef = useRef(null);
+  const searchCacheRef = useRef(new Map());
 
   // Avatar Tab Mode ('upload' | 'presets' | 'url')
   const [avatarMode, setAvatarMode] = useState('upload');
@@ -131,10 +133,17 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
     }
   }, [isOpen, user]);
 
-  // Debounced search for Spotify tracks
+  // Debounced search for Spotify tracks (with instant client-side query cache)
   useEffect(() => {
-    if (!songQuery.trim()) {
+    const trimmed = songQuery.trim().toLowerCase();
+    if (!trimmed) {
       setSearchResults([]);
+      setIsSearchingSong(false);
+      return;
+    }
+
+    if (searchCacheRef.current.has(trimmed)) {
+      setSearchResults(searchCacheRef.current.get(trimmed));
       setIsSearchingSong(false);
       return;
     }
@@ -144,14 +153,16 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
 
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        const res = await ApiClient.get(`/spotify/search/tracks?q=${encodeURIComponent(songQuery.trim())}&limit=5`);
-        setSearchResults(res.tracks || []);
+        const res = await ApiClient.get(`/spotify/search/tracks?q=${encodeURIComponent(trimmed)}&limit=5`);
+        const list = res.tracks || [];
+        searchCacheRef.current.set(trimmed, list);
+        setSearchResults(list);
       } catch (err) {
         console.error('Failed to search tracks for favorite:', err);
       } finally {
         setIsSearchingSong(false);
       }
-    }, 250);
+    }, 200);
 
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
@@ -195,7 +206,8 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
         favoriteSong: favoriteSong ? {
           title: favoriteSong.title,
           artist: favoriteSong.artist,
-          coverUrl: favoriteSong.coverUrl || favoriteSong.cover,
+          albumArt: favoriteSong.albumArt || favoriteSong.coverUrl || favoriteSong.cover || null,
+          coverUrl: favoriteSong.coverUrl || favoriteSong.albumArt || favoriteSong.cover || null,
           spotifyId: favoriteSong.spotifyId || favoriteSong.id,
           previewUrl: favoriteSong.previewUrl
         } : null
@@ -564,10 +576,11 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                 marginBottom: '10px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <img
-                    src={favoriteSong.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=120'}
+                  <VinylArt
+                    src={favoriteSong.coverUrl || favoriteSong.albumArt}
                     alt={favoriteSong.title}
-                    style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }}
+                    size={48}
+                    borderRadius="8px"
                   />
                   <div>
                     <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-text-bright)' }}>
@@ -656,44 +669,49 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
 
                 {/* Results list */}
                 <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {searchResults.map(track => (
-                    <div
-                      key={track.spotifyId || track.id || track.title}
-                      onClick={() => {
-                        setFavoriteSong({
-                          title: track.title,
-                          artist: track.artist,
-                          coverUrl: track.coverUrl || track.cover,
-                          spotifyId: track.spotifyId || track.id,
-                          previewUrl: track.previewUrl
-                        });
-                        setIsSongSearchOpen(false);
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 10px',
-                        borderRadius: 'var(--radius-sm)',
-                        backgroundColor: 'var(--color-bg)',
-                        cursor: 'pointer',
-                        transition: 'background 0.15s ease'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-                        <img 
-                          src={track.coverUrl || track.cover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=80'} 
-                          alt={track.title} 
-                          style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover' }} 
-                        />
-                        <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                          <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{track.title}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>{track.artist}</div>
+                  {searchResults.map(track => {
+                    const artwork = track.albumArt || track.coverUrl || track.cover || '';
+                    return (
+                      <div
+                        key={track.spotifyId || track.id || track.title}
+                        onClick={() => {
+                          setFavoriteSong({
+                            title: track.title,
+                            artist: track.artist,
+                            albumArt: artwork,
+                            coverUrl: artwork,
+                            spotifyId: track.spotifyId || track.id,
+                            previewUrl: track.previewUrl
+                          });
+                          setIsSongSearchOpen(false);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 10px',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: 'var(--color-bg)',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                          <VinylArt
+                            src={artwork}
+                            alt={track.title}
+                            size={40}
+                            borderRadius="6px"
+                          />
+                          <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{track.title}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>{track.artist}</div>
+                          </div>
                         </div>
+                        <span className="badge badge-green" style={{ fontSize: '0.65rem', flexShrink: 0 }}>Pilih</span>
                       </div>
-                      <span className="badge badge-green" style={{ fontSize: '0.65rem', flexShrink: 0 }}>Pilih</span>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {songQuery && searchResults.length === 0 && !isSearchingSong && (
                     <div style={{ textAlign: 'center', padding: '16px', fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>

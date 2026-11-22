@@ -105,10 +105,10 @@ export function FriendInviteModal({ isOpen, onClose, roomCode, gameId, user, cat
           </Button>
         </div>
 
-        {/* Mutual Friends list */}
+        {/* Accepted Friends list */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-            Pemain & Teman Terdaftar
+            Daftar Teman
           </span>
           <span style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
             Kirim undangan instan
@@ -118,7 +118,7 @@ export function FriendInviteModal({ isOpen, onClose, roomCode, gameId, user, cat
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px', maxHeight: '240px', overflowY: 'auto' }}>
           {friends.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--color-text-dim)' }}>
-              Belum ada pemain lain yang online. Bagikan kode di atas!
+              Belum ada teman yang ditambahkan. Tambahkan teman di menu Teman atau bagikan kode di atas!
             </div>
           ) : (
             friends.map(friend => (

@@ -89,7 +89,7 @@ export function GlobalLeaderboardPage({ currentUserId, onOpenPublicProfile }) {
                       {item.displayName} {isMe && <span style={{ fontSize: '0.78rem', opacity: 0.8 }}>(Kamu)</span>}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginTop: '2px' }}>
-                      @{item.username} • {item.gamesPlayed || 0} Games • Win Rate {item.winRate || 0}%
+                      @{item.username} • {item.gamesPlayed || 0} Games • Guess Rate {item.guessRate ?? item.winRate ?? 0}%
                     </div>
                   </div>
                 </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Disc3 } from 'lucide-react';
 
 export function VinylArt({
@@ -9,6 +9,10 @@ export function VinylArt({
   style = {}
 }) {
   const [hasError, setHasError] = useState(!src);
+
+  useEffect(() => {
+    setHasError(!src);
+  }, [src]);
 
   if (!hasError && src) {
     return (

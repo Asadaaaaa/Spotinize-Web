@@ -321,9 +321,11 @@ export function useGame(gameId, user) {
     };
   }, [isTimerRunning]);
 
-  // Play clue audio (Starts timer ONLY when audio actually plays)
+  // Play clue audio (Unlocks Web Audio synchronously & waits for clue if still fetching)
   const playClue = async () => {
-    if (!gameState?.currentTrack) return;
+    if (!gameState?.currentTrack || isAudioLoading) return;
+
+    audioPlayer.unlock();
 
     if (!isTimerRunning && roundStatus === 'THINKING') {
       startTimer();
@@ -331,12 +333,23 @@ export function useGame(gameId, user) {
     }
 
     const clueAudioUrl = `/api/audio/clue/${gameState.currentTrack.id}?duration=${revealLevel}`;
+    if (!audioPlayer.isReady(clueAudioUrl)) {
+      setIsAudioLoading(true);
+      try {
+        await audioPlayer.preload(clueAudioUrl);
+      } finally {
+        if (isMountedRef.current) setIsAudioLoading(false);
+      }
+    }
+
     await audioPlayer.playClue(clueAudioUrl, revealLevel);
   };
 
   // Progressive Reveal
   const revealNext = async () => {
-    if (isPlayingAudio || revealLevel >= 5.0 || roundStatus !== 'THINKING') return;
+    if (isPlayingAudio || isAudioLoading || revealLevel >= 5.0 || roundStatus !== 'THINKING') return;
+
+    audioPlayer.unlock();
 
     try {
       const res = await ApiClient.post(`/game/${gameId}/reveal`);
@@ -347,6 +360,14 @@ export function useGame(gameId, user) {
 
       if (gameState?.currentTrack) {
         const clueAudioUrl = `/api/audio/clue/${gameState.currentTrack.id}?duration=${nextLevel}`;
+        if (!audioPlayer.isReady(clueAudioUrl)) {
+          setIsAudioLoading(true);
+          try {
+            await audioPlayer.preload(clueAudioUrl);
+          } finally {
+            if (isMountedRef.current) setIsAudioLoading(false);
+          }
+        }
         await audioPlayer.playClue(clueAudioUrl, nextLevel);
       }
     } catch (err) {

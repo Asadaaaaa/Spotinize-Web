@@ -1,10 +1,13 @@
-import React from 'react';
-import { Bell, X, Check, Play, Sparkles, Clock, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bell, X, Check, Play } from 'lucide-react';
 import Button from './Button.jsx';
 import Avatar from './Avatar.jsx';
 import ApiClient from '../services/api.js';
 
 export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoinRoom, onRefresh }) {
+  const [handledMap, setHandledMap] = useState({});
+  const [busyId, setBusyId] = useState(null);
+
   if (!isOpen) return null;
 
   const handleMarkAllRead = async () => {
@@ -26,6 +29,28 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
     } catch (e) {}
   };
 
+  const handleFriendResponse = async (notif, action) => {
+    try {
+      setBusyId(notif.id);
+      const endpoint = action === 'accept' ? '/friends/accept' : '/friends/reject';
+      await ApiClient.post(endpoint, {
+        requestId: notif.data?.requestId,
+        requesterId: notif.senderId || notif.data?.requesterId
+      });
+      await ApiClient.post(`/notifications/${notif.id}/read`).catch(() => {});
+      setHandledMap(prev => ({
+        ...prev,
+        [notif.id]: action === 'accept' ? 'ACCEPTED' : 'REJECTED'
+      }));
+      if (onRefresh) onRefresh();
+    } catch (e) {
+      await ApiClient.post(`/notifications/${notif.id}/read`).catch(() => {});
+      if (onRefresh) onRefresh();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const formatTime = (dateStr) => {
     if (!dateStr) return '';
     const diffSeconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -37,9 +62,9 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div 
-        className="modal-content" 
-        onClick={e => e.stopPropagation()} 
+      <div
+        className="modal-content"
+        onClick={e => e.stopPropagation()}
         style={{ maxWidth: '440px', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
       >
         {/* Header */}
@@ -61,12 +86,12 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
               <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Notifikasi</h3>
             </div>
           </div>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             {notifications.length > 0 && (
-              <button 
-                onClick={handleMarkAllRead} 
-                className="btn btn-ghost btn-sm" 
+              <button
+                onClick={handleMarkAllRead}
+                className="btn btn-ghost btn-sm"
                 style={{ fontSize: '0.75rem', padding: '4px 8px', color: 'var(--color-text-dim)' }}
               >
                 Baca Semua
@@ -84,11 +109,14 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
             <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--color-text-dim)' }}>
               <Bell size={36} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
               <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>Belum ada notifikasi</p>
-              <span style={{ fontSize: '0.8rem' }}>Undangan main dari teman akan muncul di sini.</span>
+              <span style={{ fontSize: '0.8rem' }}>Undangan main dan permintaan teman akan muncul di sini.</span>
             </div>
           ) : (
             notifications.map(notif => {
               const isInvite = notif.type === 'INVITE';
+              const isFriendRequest = notif.type === 'FRIEND_REQUEST';
+              const handledStatus = handledMap[notif.id];
+
               return (
                 <div
                   key={notif.id}
@@ -103,13 +131,13 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <Avatar 
-                      src={notif.sender?.avatarUrl || notif.data?.hostAvatar} 
-                      alt={notif.sender?.displayName || notif.data?.hostName}
+                    <Avatar
+                      src={notif.sender?.avatarUrl || notif.data?.hostAvatar || notif.data?.requesterAvatar}
+                      alt={notif.sender?.displayName || notif.data?.hostName || notif.data?.requesterName}
                       size="sm"
                       seed={notif.senderId || notif.title}
                     />
-                    
+
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '6px' }}>
                         <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text-bright)' }}>
@@ -119,14 +147,14 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
                           {formatTime(notif.createdAt)}
                         </span>
                       </div>
-                      
+
                       <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: '2px', lineHeight: 1.4 }}>
                         {notif.message}
                       </p>
                     </div>
                   </div>
 
-                  {/* If room invite, show Quick Action Button */}
+                  {/* Room invite quick action */}
                   {isInvite && notif.data?.roomCode && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
                       <Button
@@ -138,6 +166,40 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
                       >
                         Gabung Room [{notif.data.roomCode}]
                       </Button>
+                    </div>
+                  )}
+
+                  {/* Friend request quick accept / reject */}
+                  {isFriendRequest && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                      {handledStatus === 'ACCEPTED' ? (
+                        <span className="badge badge-green" style={{ fontSize: '0.72rem' }}>Permintaan diterima ✓</span>
+                      ) : handledStatus === 'REJECTED' ? (
+                        <span className="badge badge-gray" style={{ fontSize: '0.72rem' }}>Permintaan ditolak</span>
+                      ) : !notif.isRead ? (
+                        <>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={busyId === notif.id}
+                            onClick={() => handleFriendResponse(notif, 'accept')}
+                            icon={<Check size={14} />}
+                            style={{ height: '32px', fontSize: '0.8rem' }}
+                          >
+                            Terima
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={busyId === notif.id}
+                            onClick={() => handleFriendResponse(notif, 'reject')}
+                            icon={<X size={14} />}
+                            style={{ height: '32px', fontSize: '0.8rem' }}
+                          >
+                            Tolak
+                          </Button>
+                        </>
+                      ) : null}
                     </div>
                   )}
                 </div>
