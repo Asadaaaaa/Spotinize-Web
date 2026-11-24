@@ -11,6 +11,7 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
   const [loading, setLoading] = useState(false);
   const inputRef = useRef(null);
   const searchCacheRef = useRef(new Map());
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     if (isOpen) {
@@ -25,6 +26,8 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
 
   useEffect(() => {
     const trimmed = query.trim().toLowerCase();
+    const currentReqId = ++requestIdRef.current;
+
     if (!trimmed) {
       setResults([]);
       setLoading(false);
@@ -38,21 +41,43 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
       return;
     }
 
+    let cancelled = false;
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await ApiClient.get(`/spotify/search/tracks?q=${encodeURIComponent(trimmed)}&limit=5`);
-        const list = (res.tracks || []).slice(0, 5);
+        const res = await ApiClient.get(`/spotify/search/tracks?q=${encodeURIComponent(trimmed)}&limit=8`);
+        if (cancelled || requestIdRef.current !== currentReqId) return;
+
+        const rawList = res.tracks || [];
+        // Prioritize exact/prefix title or "title artist" matches at the top
+        const list = [...rawList].sort((a, b) => {
+          const aTitle = (a.title || '').toLowerCase();
+          const bTitle = (b.title || '').toLowerCase();
+          const aFull = `${aTitle} ${(a.artist || '').toLowerCase()}`;
+          const bFull = `${bTitle} ${(b.artist || '').toLowerCase()}`;
+          const score = (title, full) =>
+            title === trimmed ? 4 :
+            full.startsWith(trimmed) || title.startsWith(trimmed) ? 3 :
+            title.includes(trimmed) ? 2 :
+            full.includes(trimmed) ? 1 : 0;
+          return score(bTitle, bFull) - score(aTitle, aFull);
+        }).slice(0, 6);
+
         searchCacheRef.current.set(trimmed, list);
         setResults(list);
       } catch (err) {
-        console.error('Search error:', err);
+        if (!cancelled) console.error('Search error:', err);
       } finally {
-        setLoading(false);
+        if (!cancelled && requestIdRef.current === currentReqId) {
+          setLoading(false);
+        }
       }
-    }, 180);
+    }, 280);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [query]);
 
   if (!isOpen) return null;

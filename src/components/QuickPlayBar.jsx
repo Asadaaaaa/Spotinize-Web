@@ -100,27 +100,48 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
     if (catId === 'Artist') setSelectedArtist(null);
   };
 
+  const artistReqIdRef = useRef(0);
+
   useEffect(() => {
     const trimmed = artistInput.trim();
+    const currentReqId = ++artistReqIdRef.current;
+
     if (!trimmed || category !== 'Artist') {
       setArtistSuggestions([]);
       setLoadingArtists(false);
       return;
     }
 
+    let cancelled = false;
+    setLoadingArtists(true);
     const timer = setTimeout(async () => {
       try {
-        setLoadingArtists(true);
-        const res = await ApiClient.get(`/spotify/search/artists?q=${encodeURIComponent(trimmed)}&limit=6`);
-        setArtistSuggestions(res.artists || []);
+        const res = await ApiClient.get(`/spotify/search/artists?q=${encodeURIComponent(trimmed)}&limit=8`);
+        if (cancelled || artistReqIdRef.current !== currentReqId) return;
+
+        const lowerQ = trimmed.toLowerCase();
+        const sorted = [...(res.artists || [])].sort((a, b) => {
+          const aName = (a.name || '').toLowerCase();
+          const bName = (b.name || '').toLowerCase();
+          const score = (n) => (n === lowerQ ? 3 : n.startsWith(lowerQ) ? 2 : n.includes(lowerQ) ? 1 : 0);
+          return score(bName) - score(aName);
+        }).slice(0, 6);
+
+        setArtistSuggestions(sorted);
         setShowSuggestions(true);
       } catch (err) {
+        // Ignore transient search errors
       } finally {
-        setLoadingArtists(false);
+        if (!cancelled && artistReqIdRef.current === currentReqId) {
+          setLoadingArtists(false);
+        }
       }
-    }, 200);
+    }, 280);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [artistInput, category]);
 
   useEffect(() => {
@@ -232,19 +253,9 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
               onClick={() => setMode('MULTIPLAYER')}
             >
               <Users size={13} />
-              <span>Multi</span>
+              <span>Multiplayer</span>
             </button>
           </div>
-
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setCollapsed(prev => !prev)}
-            style={{ padding: '6px', color: 'var(--color-text-dim)' }}
-            title={collapsed ? tx('Expand', 'Buka') : tx('Minimize', 'Ringkas')}
-          >
-            {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-          </button>
         </div>
       </div>
 
@@ -701,11 +712,26 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
                       backgroundColor: 'var(--color-primary-subtle)',
                       border: '1px solid rgba(29, 185, 84, 0.4)'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Mic2 size={15} color="var(--color-primary)" />
-                        <span style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--color-text-bright)' }}>
-                          {selectedArtist.name}
-                        </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        {selectedArtist.image ? (
+                          <img
+                            src={selectedArtist.image}
+                            alt={selectedArtist.name}
+                            style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid rgba(29, 185, 84, 0.5)' }}
+                          />
+                        ) : (
+                          <div style={{ width: '34px', height: '34px', borderRadius: '50%', backgroundColor: 'rgba(29, 185, 84, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Mic2 size={15} color="var(--color-primary)" />
+                          </div>
+                        )}
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.62rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase' }}>
+                            {tx('Selected Artist', 'Artis Dipilih')}
+                          </div>
+                          <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text-bright)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {selectedArtist.name}
+                          </div>
+                        </div>
                       </div>
                       <button
                         type="button"
@@ -791,7 +817,17 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
                             key={name}
                             type="button"
                             className="mini-chip-btn"
-                            onClick={() => setSelectedArtist({ id: null, name })}
+                            onClick={() => {
+                              setSelectedArtist({ id: null, name, image: null });
+                              ApiClient.get(`/spotify/search/artists?q=${encodeURIComponent(name)}&limit=1`)
+                                .then((res) => {
+                                  const hit = res?.artists?.[0];
+                                  if (hit?.image) {
+                                    setSelectedArtist(prev => (prev && prev.name === name ? { ...prev, id: hit.id, image: hit.image } : prev));
+                                  }
+                                })
+                                .catch(() => {});
+                            }}
                           >
                             {name}
                           </button>

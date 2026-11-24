@@ -2038,3 +2038,63 @@
   border-color: var(--color-primary);
 }
 
+/* In-game Vinyl Fade & 15s Progress Bar */
+@keyframes vinylFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.vinyl-art-fade-in {
+  animation: vinylFadeIn 0.6s ease forwards;
+}
+
+@keyframes barFill15s {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.reveal-15s-bar-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background-color: var(--color-surface-hover);
+  overflow: hidden;
+}
+
+.reveal-15s-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background-color: var(--color-primary);
+  animation: barFill15s 15s linear forwards;
+}
+
+@keyframes correctCardPop {
+  0% {
+    transform: scale(0.97);
+    box-shadow: 0 0 0 0 rgba(29, 185, 84, 0.55);
+  }
+  50% {
+    transform: scale(1.015);
+    box-shadow: 0 0 28px 4px rgba(29, 185, 84, 0.35);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 18px 0 rgba(29, 185, 84, 0.18);
+  }
+}
+
+.game-card-correct-anim {
+  border-color: rgba(29, 185, 84, 0.55) !important;
+  animation: correctCardPop 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+

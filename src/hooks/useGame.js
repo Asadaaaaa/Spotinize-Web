@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import confetti from 'canvas-confetti';
 import ApiClient from '../services/api.js';
 import socketService from '../services/socket.js';
 import audioPlayer from '../services/audioPlayer.js';
@@ -390,7 +391,7 @@ export function useGame(gameId, user) {
 
       setRemainingAttempts(res.remainingAttempts);
       const feedbackText = res.isCorrect
-        ? tx('NAILED IT! 🎧', 'TEPAT SEKALI! 🎧')
+        ? tx('CORRECT!', 'CORRECT!')
         : res.isRoundOver
           ? tx('Out of attempts!', 'Kesempatan habis!')
           : tx(
@@ -403,7 +404,19 @@ export function useGame(gameId, user) {
         stopTimer();
         setRoundStatus('GUESSED');
         setRevealedTrack(res.targetTrack);
-        setIsRoundResultOpen(true);
+        setIsRoundResultOpen(false);
+        try {
+          confetti({
+            particleCount: 70,
+            spread: 65,
+            origin: { y: 0.55 },
+            colors: ['#1db954', '#4ade80', '#ffffff', '#facc15']
+          });
+        } catch (e) {}
+        const playId = res.targetTrack?.id || gameState?.currentTrack?.id;
+        if (playId) {
+          audioPlayer.playClue(`/api/audio/clue/${playId}?duration=15`, 15.0).catch(() => {});
+        }
       } else if (res.isRoundOver) {
         stopTimer();
         setRoundStatus('WRONG');

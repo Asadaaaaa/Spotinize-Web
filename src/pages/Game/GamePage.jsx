@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Search, SkipForward, Clock, Music, Loader2, ArrowLeft, CheckCircle2, Users, Settings } from 'lucide-react';
+import { Search, SkipForward, Clock, Music, Loader2, ArrowLeft, CheckCircle2, Users, LogOut, ArrowRight } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import AudioCluePlayer from '../../components/AudioCluePlayer.jsx';
 import SongSearchModal from '../../components/SongSearchModal.jsx';
 import LiveLeaderboard from '../../components/LiveLeaderboard.jsx';
 import PreparingGameModal from '../../components/PreparingGameModal.jsx';
-import InGameSettingsModal from '../../components/InGameSettingsModal.jsx';
 import RoundResultModal from '../Result/RoundResultModal.jsx';
 import FinalResultPage from '../Result/FinalResultPage.jsx';
+import VinylArt from '../../components/VinylArt.jsx';
+import { getSpotifyTrackUrl, SpotifyIcon } from '../../utils/spotifyLink.jsx';
 import useGame from '../../hooks/useGame.js';
 import { useLanguage } from '../../hooks/useLanguage.jsx';
 import ApiClient from '../../services/api.js';
@@ -285,18 +286,23 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
 
               <button
                 type="button"
-                onClick={() => setIsSettingsOpen(true)}
+                onClick={handleQuitGame}
                 className="btn btn-secondary btn-sm"
-                title={t('gameSettingsTitle')}
+                title={t('leaveGame') || 'Leave Game'}
                 style={{
-                  padding: '8px',
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  flexShrink: 0
+                  padding: '6px 12px',
+                  height: '34px',
+                  borderRadius: 'var(--radius-full)',
+                  flexShrink: 0,
+                  gap: '5px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: '#f87171',
+                  borderColor: 'rgba(239, 68, 68, 0.35)'
                 }}
               >
-                <Settings size={17} />
+                <LogOut size={14} />
+                <span>Leave</span>
               </button>
             </div>
           </div>
@@ -317,68 +323,127 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
             </div>
           )}
 
-          {/* Clue Audio Player Card */}
-          <Card style={{
-            backgroundColor: 'var(--color-surface)',
-            padding: '32px 20px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '24px'
-          }}>
-            <div style={{
-              width: '96px',
-              height: '96px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--color-bg-alt)',
-              border: '2px dashed var(--color-border)',
+          {/* Clue Audio Player Card (Same card transitions seamlessly on GUESSED) */}
+          <Card
+            className={roundStatus === 'GUESSED' ? 'game-card-correct-anim' : ''}
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              padding: '28px 20px',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-text-dim)'
-            }}>
-              <Music size={40} />
+              gap: '22px'
+            }}
+          >
+            {/* Vinyl Disc: empty while THINKING, fades in artwork when GUESSED */}
+            <div className={`track-vinyl-disc ${isPlayingAudio ? 'spinning' : ''}`}>
+              {roundStatus === 'GUESSED' && revealedTrack ? (
+                <VinylArt
+                  src={revealedTrack.albumArt || revealedTrack.coverUrl}
+                  alt={revealedTrack.title}
+                  size={98}
+                  borderRadius="50%"
+                  className="vinyl-art-fade-in"
+                  style={{ border: '2px solid rgba(255,255,255,0.16)', animation: 'vinylFadeIn 0.6s ease forwards' }}
+                />
+              ) : (
+                <Music size={34} color="var(--color-text-dim)" style={{ opacity: 0.45 }} />
+              )}
+              <span className="track-vinyl-spindle" />
             </div>
 
-            {/* Audio Clue Action Controller */}
-            <AudioCluePlayer
-              revealLevel={revealLevel}
-              isPlaying={isPlayingAudio}
-              isAudioReady={isAudioReady}
-              isAudioLoading={isAudioLoading}
-              disabled={roundStatus !== 'THINKING'}
-              onPlay={playClue}
-              onRevealNext={revealNext}
-            />
+            {roundStatus === 'GUESSED' && revealedTrack ? (
+              <div style={{ width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                {/* 15s Playback Progress Bar */}
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                    <span>{tx('Playing Preview', 'Memutar Lagu')}</span>
+                    <span style={{ color: 'var(--color-primary)' }}>15s</span>
+                  </div>
+                  <div className="reveal-15s-bar-track">
+                    <div key={revealedTrack.id || gameState?.currentRound} className="reveal-15s-bar-fill" />
+                  </div>
+                </div>
+
+                {/* Spotify & Next Song Buttons */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap', width: '100%' }}>
+                  <a
+                    href={getSpotifyTrackUrl(revealedTrack)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => audioPlayer.stop()}
+                    className="btn btn-secondary btn-md"
+                    style={{ textDecoration: 'none', gap: '7px', padding: '0 16px', height: '42px', fontWeight: 800 }}
+                  >
+                    <SpotifyIcon size={16} color="var(--color-primary)" />
+                    <span>Spotify</span>
+                  </a>
+
+                  <Button
+                    variant="primary"
+                    size="md"
+                    onClick={nextRound}
+                    icon={<ArrowRight size={17} />}
+                    style={{ height: '42px', padding: '0 22px', fontWeight: 800 }}
+                  >
+                    {(gameState?.currentRound || 1) >= (gameState?.numberOfSongs || 1)
+                      ? tx('Finish Game', 'Lihat Hasil')
+                      : tx('Next Song', 'Next Song')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              /* Progressive Reveal Bar + Clue Controls */
+              <AudioCluePlayer
+                revealLevel={revealLevel}
+                isPlaying={isPlayingAudio}
+                isAudioReady={isAudioReady}
+                isAudioLoading={isAudioLoading}
+                disabled={roundStatus !== 'THINKING'}
+                onPlay={playClue}
+                onRevealNext={revealNext}
+              />
+            )}
           </Card>
 
-          {/* Player Guess & Action Controls */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <Button
-              variant="primary"
-              size="lg"
-              fullWidth
-              disabled={roundStatus !== 'THINKING' || remainingAttempts <= 0}
-              onClick={() => setIsSearchModalOpen(true)}
-              icon={<Search size={20} fill="#000" />}
-              style={{ height: '56px', fontSize: '1.15rem' }}
-            >
-              {t('gameGuessBtn')}
-            </Button>
-
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={roundStatus !== 'THINKING'}
-                onClick={skipRound}
-                icon={<SkipForward size={16} />}
-                style={{ color: 'var(--color-text-dim)' }}
-              >
-                {t('gameSkipBtn')}
-              </Button>
+          {/* Below Card: Guess + Skip while THINKING, or Song Title & Artist when GUESSED */}
+          {roundStatus === 'GUESSED' && revealedTrack ? (
+            <div style={{ textAlign: 'center', padding: '8px 12px' }}>
+              <div style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--color-text-bright)' }}>
+                {revealedTrack.title}
+              </div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--color-text-muted)', marginTop: '3px' }}>
+                {revealedTrack.artist}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                disabled={roundStatus !== 'THINKING' || remainingAttempts <= 0}
+                onClick={() => setIsSearchModalOpen(true)}
+                icon={<Search size={20} fill="#000" />}
+                style={{ height: '56px', fontSize: '1.15rem' }}
+              >
+                {t('gameGuessBtn')}
+              </Button>
+
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={roundStatus !== 'THINKING'}
+                  onClick={skipRound}
+                  icon={<SkipForward size={16} />}
+                  style={{ color: 'var(--color-text-dim)' }}
+                >
+                  {t('gameSkipBtn')}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Multiplayer Live Sidebar (if Multiplayer) */}
@@ -420,14 +485,6 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
         isOpen={!isInitialGameReady && !gameState?.isFinished && !isWaitingForOthers}
         progress={initialProgress}
         category={gameState?.category || 'Global Trends'}
-      />
-
-      {/* In-Game Settings Modal */}
-      <InGameSettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        gameState={gameState}
-        onQuitGame={handleQuitGame}
       />
     </div>
   );
