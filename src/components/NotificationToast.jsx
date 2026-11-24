@@ -2,8 +2,10 @@ import React from 'react';
 import { Play, X, Sparkles, Users } from 'lucide-react';
 import Button from './Button.jsx';
 import Avatar from './Avatar.jsx';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function NotificationToast({ invite, onAccept, onDecline }) {
+  const { tx, tCategory } = useLanguage();
   if (!invite) return null;
 
   return (
@@ -31,7 +33,7 @@ export function NotificationToast({ invite, onAccept, onDecline }) {
           />
           <div>
             <span className="badge badge-green" style={{ fontSize: '0.65rem', padding: '2px 6px', marginBottom: '2px' }}>
-              <Users size={10} /> Undangan Mabar
+              <Users size={10} /> {tx('Game Invite', 'Undangan Mabar')}
             </span>
             <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-text-bright)' }}>
               {invite.hostName}
@@ -49,7 +51,7 @@ export function NotificationToast({ invite, onAccept, onDecline }) {
       </div>
 
       <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '8px', marginBottom: '12px' }}>
-        Mengajak kamu bermain di Room <strong style={{ color: 'var(--color-primary)', fontFamily: 'var(--font-mono)' }}>[{invite.roomCode}]</strong> ({invite.category || 'Global Trends'})!
+        {tx('Inviting you to play in Room', 'Mengajak kamu bermain di Room')} <strong style={{ color: 'var(--color-primary)', fontFamily: 'var(--font-mono)' }}>[{invite.roomCode}]</strong> ({tCategory(invite.category || 'Global Trends')})!
       </p>
 
       <div style={{ display: 'flex', gap: '8px' }}>
@@ -61,7 +63,7 @@ export function NotificationToast({ invite, onAccept, onDecline }) {
           icon={<Play size={14} fill="#000" />}
           style={{ height: '36px', fontWeight: 800 }}
         >
-          Terima & Main
+          {tx('Accept & Play', 'Terima & Main')}
         </Button>
 
         <Button
@@ -70,7 +72,7 @@ export function NotificationToast({ invite, onAccept, onDecline }) {
           onClick={onDecline}
           style={{ height: '36px' }}
         >
-          Tolak
+          {tx('Decline', 'Tolak')}
         </Button>
       </div>
     </div>

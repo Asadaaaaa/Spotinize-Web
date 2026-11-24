@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Check, Loader2 } from 'lucide-react';
 import ApiClient from '../services/api.js';
 import VinylArt from './VinylArt.jsx';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttempts = 3 }) {
+  const { tx } = useLanguage();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -67,9 +69,12 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <h3 style={{ fontSize: '1.25rem' }}>Cari Judul Lagu</h3>
+            <h3 style={{ fontSize: '1.25rem' }}>{tx('Search Song Title', 'Cari Judul Lagu')}</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-              Tebak lagu dari katalog Spotify ({remainingAttempts} kesempatan tersisa)
+              {tx(
+                `Guess a song from Spotify catalog (${remainingAttempts} attempt${remainingAttempts === 1 ? '' : 's'} left)`,
+                `Tebak lagu dari katalog Spotify (${remainingAttempts} kesempatan tersisa)`
+              )}
             </p>
           </div>
           <button 
@@ -92,7 +97,7 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
             type="text"
             className="input"
             style={{ paddingLeft: '42px', fontSize: '1rem' }}
-            placeholder="Ketik judul lagu atau artis..."
+            placeholder={tx('Type a song title or artist...', 'Ketik judul lagu atau artis...')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -131,10 +136,10 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
               <VinylArt size={50} />
               <div>
                 <p style={{ fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '0.95rem' }}>
-                  Ketik judul lagu atau nama artis
+                  {tx('Type a song title or artist name', 'Ketik judul lagu atau nama artis')}
                 </p>
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', marginTop: '2px' }}>
-                  Mencari bebas di seluruh katalog lagu Spotify
+                  {tx('Freely search across the entire Spotify song catalog', 'Mencari bebas di seluruh katalog lagu Spotify')}
                 </p>
               </div>
             </div>
@@ -144,8 +149,8 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
           {hasTyped && results.length === 0 && !loading && (
             <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-dim)' }}>
               <VinylArt size={44} style={{ margin: '0 auto 12px auto' }} />
-              <p style={{ fontWeight: 600 }}>Lagu "{query}" tidak ditemukan</p>
-              <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>Coba periksa ejaan atau gunakan nama artis</p>
+              <p style={{ fontWeight: 600 }}>{tx(`Song "${query}" not found`, `Lagu "${query}" tidak ditemukan`)}</p>
+              <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>{tx('Check the spelling or try searching by artist name', 'Coba periksa ejaan atau gunakan nama artis')}</p>
             </div>
           )}
 

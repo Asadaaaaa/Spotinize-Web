@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { X, Volume2, VolumeX, LogOut, Settings, Music, Users, User } from 'lucide-react';
 import Button from './Button.jsx';
 import audioPlayer from '../services/audioPlayer.js';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function InGameSettingsModal({ isOpen, onClose, gameState, onQuitGame }) {
+  const { t, tx, tCategory } = useLanguage();
   const [volume, setVolume] = useState(() => Math.round(audioPlayer.getVolume() * 100));
   const [muted, setMuted] = useState(() => audioPlayer.isMuted());
   const [confirmQuit, setConfirmQuit] = useState(false);
@@ -50,7 +52,7 @@ export function InGameSettingsModal({ isOpen, onClose, gameState, onQuitGame }) 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Settings size={20} color="var(--color-primary)" />
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>Pengaturan Game</h3>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>{t('gameSettingsTitle')}</h3>
           </div>
           <button
             type="button"
@@ -74,7 +76,7 @@ export function InGameSettingsModal({ isOpen, onClose, gameState, onQuitGame }) 
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-bright)' }}>
-              Volume Musik
+              {t('gameVolume')}
             </span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-primary)' }}>
               {muted ? 'MUTE' : `${volume}%`}
@@ -130,10 +132,10 @@ export function InGameSettingsModal({ isOpen, onClose, gameState, onQuitGame }) 
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--color-text-dim)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Music size={14} /> Kategori
+              <Music size={14} /> {tx('Category', 'Kategori')}
             </span>
             <span style={{ fontWeight: 700, color: 'var(--color-text-bright)' }}>
-              {gameState?.category || 'Global Trends'}
+              {tCategory(gameState?.category || 'Global Trends')}
             </span>
           </div>
 
@@ -146,7 +148,7 @@ export function InGameSettingsModal({ isOpen, onClose, gameState, onQuitGame }) 
 
           {isMultiplayer && gameState?.roomCode && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--color-text-dim)' }}>Kode Room</span>
+              <span style={{ color: 'var(--color-text-dim)' }}>{tx('Room Code', 'Kode Room')}</span>
               <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--color-text-bright)' }}>
                 {gameState.roomCode}
               </span>
@@ -163,7 +165,7 @@ export function InGameSettingsModal({ isOpen, onClose, gameState, onQuitGame }) 
             icon={<LogOut size={16} />}
             style={{ height: '44px' }}
           >
-            Keluar dari Game (Quit)
+            {t('gameQuitBtn')}
           </Button>
         ) : (
           <div style={{
@@ -176,7 +178,7 @@ export function InGameSettingsModal({ isOpen, onClose, gameState, onQuitGame }) 
             gap: '10px'
           }}>
             <p style={{ fontSize: '0.82rem', color: 'var(--color-text-bright)', textAlign: 'center', fontWeight: 600 }}>
-              Yakin ingin keluar? Progres ronde saat ini tidak akan disimpan.
+              {t('gameQuitConfirm')}
             </p>
             <div style={{ display: 'flex', gap: '8px' }}>
               <Button
@@ -185,7 +187,7 @@ export function InGameSettingsModal({ isOpen, onClose, gameState, onQuitGame }) 
                 fullWidth
                 onClick={() => setConfirmQuit(false)}
               >
-                Batal
+                {t('gameCancel')}
               </Button>
               <Button
                 variant="danger"
@@ -197,7 +199,7 @@ export function InGameSettingsModal({ isOpen, onClose, gameState, onQuitGame }) 
                   onQuitGame();
                 }}
               >
-                Ya, Keluar
+                {t('gameYesQuit')}
               </Button>
             </div>
           </div>

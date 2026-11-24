@@ -1,11 +1,26 @@
-import React from 'react';
-import { Trophy, Users, User, LogOut, Disc3, Bell } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Trophy, Users, User, LogOut, Disc3, Bell, Globe, ChevronDown, Home } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 import Avatar from './Avatar.jsx';
 import Logo from './Logo.jsx';
 
-export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifications }) {
+export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifications, hideNavLinks = false }) {
   const { user, isAuthenticated, logout } = useAuth();
+  const { lang, toggleLang, t } = useLanguage();
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isUserMenuOpen]);
 
   return (
     <>
@@ -20,6 +35,7 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
         zIndex: 100
       }}>
         <div className="container" style={{
+          position: 'relative',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -30,40 +46,47 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
             onClick={() => onNavigate('landing')}
             style={{
               display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: '2px',
               cursor: 'pointer',
-              padding: '6px 0'
+              padding: '4px 0'
             }}
           >
             <Logo size="md" />
             <span style={{
-              fontSize: '0.65rem',
-              fontWeight: 800,
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-              padding: '2px 7px',
+              fontSize: '0.58rem',
+              fontWeight: 700,
+              letterSpacing: '0.03em',
+              padding: '1px 6px',
               borderRadius: 'var(--radius-full, 9999px)',
-              backgroundColor: 'rgba(29, 185, 84, 0.12)',
-              color: 'var(--color-primary, #1DB954)',
-              border: '1px solid rgba(29, 185, 84, 0.3)',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              color: 'var(--color-text-dim, #8e8e93)',
+              border: '1px solid var(--color-border)',
               lineHeight: 1.2,
               userSelect: 'none',
               whiteSpace: 'nowrap'
             }}>
-              Beta Test
+              {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v0.5.24112601'} Beta
             </span>
           </div>
 
           {/* Desktop Navigation Links (Centered) */}
-          {isAuthenticated && (
-            <nav className="desktop-only-nav" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {isAuthenticated && !hideNavLinks && (
+            <nav className="desktop-only-nav" style={{
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
               <button
                 className={`btn btn-sm ${currentTab === 'dashboard' ? 'btn-secondary' : 'btn-ghost'}`}
                 onClick={() => onNavigate('dashboard')}
               >
                 <Disc3 size={16} />
-                <span>Main</span>
+                <span>{t('navPlay')}</span>
               </button>
 
               <button
@@ -71,7 +94,7 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
                 onClick={() => onNavigate('leaderboard')}
               >
                 <Trophy size={16} />
-                <span>Rank</span>
+                <span>{t('navRank')}</span>
               </button>
 
               <button
@@ -79,113 +102,185 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
                 onClick={() => onNavigate('friends')}
               >
                 <Users size={16} />
-                <span>Teman</span>
-              </button>
-
-              <button
-                className={`btn btn-sm ${currentTab === 'profile' ? 'btn-secondary' : 'btn-ghost'}`}
-                onClick={() => onNavigate('profile')}
-              >
-                <User size={16} />
-                <span>Profil</span>
+                <span>{t('navFriends')}</span>
               </button>
             </nav>
           )}
 
-          {/* Right Controls: Notifications & User Profile */}
+          {/* Right Controls: User Chip Dropdown (Authenticated) or Language + Login (Guest) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {!isAuthenticated && (
+              <button
+                type="button"
+                onClick={toggleLang}
+                className="btn btn-secondary btn-sm"
+                title={lang === 'en' ? 'Switch to Indonesian' : 'Ganti ke Bahasa Inggris'}
+                style={{
+                  padding: '6px 10px',
+                  height: '36px',
+                  borderRadius: 'var(--radius-full)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '0.75rem',
+                  fontWeight: 800
+                }}
+              >
+                <Globe size={14} color="var(--color-primary)" />
+                <span>{lang.toUpperCase()}</span>
+              </button>
+            )}
+
             {isAuthenticated ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                
-                {/* Notification Bell Button (Visible on both Mobile & Desktop) */}
+              currentTab === 'landing' ? (
                 <button
-                  onClick={onOpenNotifications}
-                  className="btn btn-ghost btn-sm"
-                  title="Notifikasi"
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => onNavigate('dashboard')}
+                  title={t('navHome')}
+                  aria-label={t('navHome')}
                   style={{
-                    position: 'relative',
-                    padding: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)',
                     width: '38px',
                     height: '38px',
-                    display: 'flex',
+                    padding: 0,
+                    borderRadius: 'var(--radius-full)',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--color-text-bright)'
+                    justifyContent: 'center'
                   }}
                 >
-                  <Bell size={18} />
-                  {unreadCount > 0 && (
-                    <span style={{
-                      position: 'absolute',
-                      top: '-3px',
-                      right: '-3px',
-                      minWidth: '18px',
-                      height: '18px',
-                      padding: '0 4px',
-                      borderRadius: '9px',
-                      backgroundColor: 'var(--color-primary)',
-                      color: '#000',
-                      fontSize: '0.65rem',
-                      fontWeight: 900,
+                  <Home size={18} color="var(--color-primary)" />
+                </button>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* User Chip + Dropdown */}
+                <div ref={userMenuRef} style={{ position: 'relative' }}>
+                  <div
+                    onClick={() => setIsUserMenuOpen(prev => !prev)}
+                    style={{
+                      position: 'relative',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 0 8px rgba(29, 185, 84, 0.8)'
-                    }}>
-                      {unreadCount > 9 ? '9+' : unreadCount}
+                      gap: '6px',
+                      cursor: 'pointer',
+                      padding: '3px 8px 3px 4px',
+                      borderRadius: 'var(--radius-full)',
+                      backgroundColor: 'var(--color-surface)',
+                      border: isUserMenuOpen ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      height: '38px'
+                    }}
+                  >
+                    <Avatar
+                      src={user.avatarUrl}
+                      alt={user.displayName}
+                      size="sm"
+                      seed={user.id || user.displayName}
+                      style={{ width: '28px', height: '28px' }}
+                    />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-bright)', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {user.displayName?.split(' ')[0]}
                     </span>
+                    <ChevronDown size={14} color="var(--color-text-dim)" />
+
+                    {unreadCount > 0 && (
+                      <span style={{
+                        position: 'absolute',
+                        top: '-4px',
+                        right: '-4px',
+                        minWidth: '18px',
+                        height: '18px',
+                        padding: '0 4px',
+                        borderRadius: '9px',
+                        backgroundColor: 'var(--color-primary)',
+                        color: '#000',
+                        fontSize: '0.65rem',
+                        fontWeight: 900,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 0 8px rgba(29, 185, 84, 0.8)'
+                      }}>
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </div>
+
+                  {isUserMenuOpen && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 8px)',
+                      right: 0,
+                      minWidth: '200px',
+                      backgroundColor: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: '0 12px 32px rgba(0, 0, 0, 0.55)',
+                      padding: '6px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      zIndex: 200
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          onNavigate('profile');
+                        }}
+                        className="btn btn-ghost btn-sm"
+                        style={{ justifyContent: 'flex-start', width: '100%', padding: '8px 10px', gap: '8px' }}
+                      >
+                        <User size={15} />
+                        <span>{t('navProfile')}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          onOpenNotifications?.();
+                        }}
+                        className="btn btn-ghost btn-sm"
+                        style={{ justifyContent: 'space-between', width: '100%', padding: '8px 10px' }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                          <Bell size={15} />
+                          <span>{t('navNotifications')}</span>
+                        </span>
+                        {unreadCount > 0 && (
+                          <span className="badge badge-green" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          toggleLang();
+                        }}
+                        className="btn btn-ghost btn-sm"
+                        style={{ justifyContent: 'space-between', width: '100%', padding: '8px 10px' }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                          <Globe size={15} color="var(--color-primary)" />
+                          <span>{lang === 'en' ? 'Language' : 'Bahasa'}</span>
+                        </span>
+                        <span className="badge badge-gray" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
+                          {lang.toUpperCase()}
+                        </span>
+                      </button>
+                    </div>
                   )}
-                </button>
-
-                {/* Profile Pill */}
-                <div 
-                  onClick={() => onNavigate('profile')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    cursor: 'pointer',
-                    padding: '3px 8px 3px 4px',
-                    borderRadius: 'var(--radius-full)',
-                    backgroundColor: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)',
-                    height: '38px'
-                  }}
-                >
-                  <Avatar 
-                    src={user.avatarUrl} 
-                    alt={user.displayName}
-                    size="sm"
-                    seed={user.id || user.displayName}
-                    style={{ width: '28px', height: '28px' }}
-                  />
-                  <span className="desktop-only-nav" style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-bright)', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user.displayName?.split(' ')[0]}
-                  </span>
-                  <span className="badge badge-green desktop-only-nav" style={{ padding: '2px 6px', fontSize: '0.7rem' }}>
-                    {user.bestScore || 0} pts
-                  </span>
                 </div>
-
-                {/* Logout Button (Desktop) */}
-                <button
-                  onClick={logout}
-                  className="btn btn-ghost btn-sm desktop-only-nav"
-                  title="Keluar"
-                  style={{ padding: '6px', minWidth: 'auto' }}
-                >
-                  <LogOut size={16} />
-                </button>
               </div>
+              )
             ) : (
               <button 
                 className="btn btn-primary btn-sm"
                 onClick={() => onNavigate('login')}
               >
-                Login
+                {t('navLogin')}
               </button>
             )}
           </div>
@@ -193,14 +288,14 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
       </header>
 
       {/* Floating Bottom Navigation Pill (Mobile Only) */}
-      {isAuthenticated && (
+      {isAuthenticated && !hideNavLinks && (
         <nav className="bottom-nav-floating" aria-label="Mobile Bottom Navigation">
           <button
             className={`floating-nav-item ${currentTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => onNavigate('dashboard')}
           >
             <Disc3 size={20} />
-            <span>Main</span>
+            <span>{t('navPlay')}</span>
           </button>
 
           <button
@@ -208,7 +303,7 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
             onClick={() => onNavigate('leaderboard')}
           >
             <Trophy size={20} />
-            <span>Rank</span>
+            <span>{t('navRank')}</span>
           </button>
 
           <button
@@ -216,15 +311,7 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
             onClick={() => onNavigate('friends')}
           >
             <Users size={20} />
-            <span>Teman</span>
-          </button>
-
-          <button
-            className={`floating-nav-item ${currentTab === 'profile' ? 'active' : ''}`}
-            onClick={() => onNavigate('profile')}
-          >
-            <User size={20} />
-            <span>Profil</span>
+            <span>{t('navFriends')}</span>
           </button>
         </nav>
       )}

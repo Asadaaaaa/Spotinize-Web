@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { AlertCircle, HelpCircle, CheckCircle2, X } from 'lucide-react';
 import Button from '../components/Button.jsx';
+import { useLanguage } from './useLanguage.jsx';
 
 const DialogContext = createContext(null);
 
 export function DialogProvider({ children }) {
+  const { tx } = useLanguage();
   const [dialog, setDialog] = useState(null);
   const resolverRef = useRef(null);
 
@@ -21,27 +23,27 @@ export function DialogProvider({ children }) {
       resolverRef.current = resolve;
       setDialog({
         type: 'alert',
-        title: options.title || 'Pemberitahuan',
+        title: options.title || tx('Notice', 'Pemberitahuan'),
         message,
         variant: options.variant || 'info', // 'info' | 'danger' | 'success'
-        confirmText: options.confirmText || 'Mengerti'
+        confirmText: options.confirmText || tx('Got it', 'Mengerti')
       });
     });
-  }, []);
+  }, [tx]);
 
   const showConfirm = useCallback((message, options = {}) => {
     return new Promise((resolve) => {
       resolverRef.current = resolve;
       setDialog({
         type: 'confirm',
-        title: options.title || 'Konfirmasi',
+        title: options.title || tx('Confirmation', 'Konfirmasi'),
         message,
         variant: options.variant || 'warning', // 'warning' | 'danger' | 'info'
-        confirmText: options.confirmText || 'Ya, Lanjutkan',
-        cancelText: options.cancelText || 'Batal'
+        confirmText: options.confirmText || tx('Yes, Continue', 'Ya, Lanjutkan'),
+        cancelText: options.cancelText || tx('Cancel', 'Batal')
       });
     });
-  }, []);
+  }, [tx]);
 
   const isDanger = dialog?.variant === 'danger';
   const isSuccess = dialog?.variant === 'success';

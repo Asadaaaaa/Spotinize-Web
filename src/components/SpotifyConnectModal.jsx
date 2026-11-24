@@ -3,9 +3,11 @@ import { Music2, ArrowRight, Sparkles, LogOut, CheckCircle2, ShieldCheck } from 
 import Button from './Button.jsx';
 import Avatar from './Avatar.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function SpotifyConnectModal({ isOpen, user, onConnected }) {
   const { connectSpotify, logout } = useAuth();
+  const { tx } = useLanguage();
   const [connecting, setConnecting] = useState(false);
 
   if (!isOpen || !user) return null;
@@ -50,14 +52,14 @@ export function SpotifyConnectModal({ isOpen, user, onConnected }) {
         <div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
             <span className="badge badge-green">
-              <Sparkles size={12} /> Langkah Terakhir
+              <Sparkles size={12} /> {tx('Final Step', 'Langkah Terakhir')}
             </span>
           </div>
           <h2 style={{ fontSize: '1.6rem', fontWeight: 900, marginBottom: '6px' }}>
-            Hubungkan Akun Spotify
+            {tx('Connect Spotify Account', 'Hubungkan Akun Spotify')}
           </h2>
           <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-            Halo <strong>@{user.username}</strong>! Untuk memulai permainan tebak lagu dan mencatat ranking global, silakan hubungkan akun Spotify Anda.
+            {tx('Hi', 'Halo')} <strong>@{user.username}</strong>! {tx('To start guessing songs and record your global ranking, please connect your Spotify account.', 'Untuk memulai permainan tebak lagu dan mencatat ranking global, silakan hubungkan akun Spotify Anda.')}
           </p>
         </div>
 
@@ -75,15 +77,15 @@ export function SpotifyConnectModal({ isOpen, user, onConnected }) {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-text)' }}>
             <CheckCircle2 size={18} color="var(--color-primary)" />
-            <span>Sinkronisasi katalog lagu resmi Spotify</span>
+            <span>{tx('Sync official Spotify song catalog', 'Sinkronisasi katalog lagu resmi Spotify')}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-text)' }}>
             <CheckCircle2 size={18} color="var(--color-primary)" />
-            <span>Akses mode multiplayer & duel tebak lagu</span>
+            <span>{tx('Access multiplayer mode & song guessing duels', 'Akses mode multiplayer & duel tebak lagu')}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-text)' }}>
             <ShieldCheck size={18} color="var(--color-primary)" />
-            <span>Statistik skor permanen di Global Leaderboard</span>
+            <span>{tx('Permanent score stats on Global Leaderboard', 'Statistik skor permanen di Global Leaderboard')}</span>
           </div>
         </div>
 
@@ -97,7 +99,7 @@ export function SpotifyConnectModal({ isOpen, user, onConnected }) {
             icon={<Music2 size={20} color="#000" />}
             style={{ height: '52px', fontSize: '1.05rem', fontWeight: 800 }}
           >
-            {connecting ? 'Membuka Spotify...' : 'Hubungkan Spotify Sekarang'}
+            {connecting ? tx('Opening Spotify...', 'Membuka Spotify...') : tx('Connect Spotify Now', 'Hubungkan Spotify Sekarang')}
           </Button>
 
           <Button
@@ -107,7 +109,7 @@ export function SpotifyConnectModal({ isOpen, user, onConnected }) {
             icon={<LogOut size={16} />}
             style={{ color: 'var(--color-text-dim)', fontSize: '0.85rem' }}
           >
-            Keluar / Ganti Akun
+            {tx('Log Out / Switch Account', 'Keluar / Ganti Akun')}
           </Button>
         </div>
       </div>

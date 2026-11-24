@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Trophy, Flame, Award, Clock, Sparkles, ChevronRight } from 'lucide-react';
 import Avatar from '../../components/Avatar.jsx';
 import ApiClient from '../../services/api.js';
+import { LeaderboardSkeleton } from '../../components/Skeletons.jsx';
+import { useLanguage } from '../../hooks/useLanguage.jsx';
 
 export function GlobalLeaderboardPage({ currentUserId, onOpenPublicProfile }) {
+  const { tx } = useLanguage();
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -31,24 +34,31 @@ export function GlobalLeaderboardPage({ currentUserId, onOpenPublicProfile }) {
     <div className="container-narrow mobile-page-container" style={{ paddingTop: '24px', paddingBottom: '64px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div>
-          <span className="badge badge-green" style={{ marginBottom: '6px' }}>
-            <Trophy size={12} /> Hall of Fame
-          </span>
           <h2 style={{ fontSize: '1.6rem' }}>Global Leaderboard</h2>
           <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-            Pemain dengan skor tebak lagu tertinggi di Spotinize. Klik pemain untuk membuka halaman profilnya!
+            {tx(
+              'Top scoring players on Spotinize. Click any player to open their profile!',
+              'Pemain dengan skor tebak lagu tertinggi di Spotinize. Klik pemain untuk membuka halaman profilnya!'
+            )}
           </p>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {leaderboard.map((item, idx) => {
+          {loading ? (
+            <LeaderboardSkeleton count={6} />
+          ) : leaderboard.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-dim)' }}>
+              {tx('No leaderboard data yet.', 'Belum ada data leaderboard.')}
+            </div>
+          ) : (
+          leaderboard.map((item, idx) => {
             const isMe = item.id === currentUserId;
             return (
               <div
                 key={item.id}
                 onClick={() => handleUserClick(item.username)}
                 className="leaderboard-item"
-                title={`Buka profil /user/${item.username}`}
+                title={tx(`Open profile /user/${item.username}`, `Buka profil /user/${item.username}`)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -86,7 +96,7 @@ export function GlobalLeaderboardPage({ currentUserId, onOpenPublicProfile }) {
                       textOverflow: 'ellipsis',
                       color: isMe ? 'var(--color-primary)' : 'var(--color-text-bright)'
                     }}>
-                      {item.displayName} {isMe && <span style={{ fontSize: '0.78rem', opacity: 0.8 }}>(Kamu)</span>}
+                      {item.displayName} {isMe && <span style={{ fontSize: '0.78rem', opacity: 0.8 }}>{tx('(You)', '(Kamu)')}</span>}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginTop: '2px' }}>
                       @{item.username} • {item.gamesPlayed || 0} Games • Guess Rate {item.guessRate ?? item.winRate ?? 0}%
@@ -107,7 +117,8 @@ export function GlobalLeaderboardPage({ currentUserId, onOpenPublicProfile }) {
                 </div>
               </div>
             );
-          })}
+          })
+          )}
         </div>
       </div>
     </div>

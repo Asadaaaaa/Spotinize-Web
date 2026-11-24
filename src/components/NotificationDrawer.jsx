@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Bell, X, Check, Play } from 'lucide-react';
+import { Bell, X, Check, Play, UserPlus } from 'lucide-react';
 import Button from './Button.jsx';
 import Avatar from './Avatar.jsx';
 import ApiClient from '../services/api.js';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoinRoom, onRefresh }) {
+  const { lang, tx, tCategory } = useLanguage();
   const [handledMap, setHandledMap] = useState({});
   const [busyId, setBusyId] = useState(null);
 
@@ -51,13 +53,30 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
     }
   };
 
+  const handleFollowBack = async (notif) => {
+    const targetId = notif.senderId || notif.data?.followerId;
+    if (!targetId) return;
+    try {
+      setBusyId(notif.id);
+      await ApiClient.post(`/follows/${targetId}`);
+      await ApiClient.post(`/notifications/${notif.id}/read`).catch(() => {});
+      setHandledMap(prev => ({ ...prev, [notif.id]: 'FOLLOWED_BACK' }));
+      if (onRefresh) onRefresh();
+    } catch (e) {
+      await ApiClient.post(`/notifications/${notif.id}/read`).catch(() => {});
+      if (onRefresh) onRefresh();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const formatTime = (dateStr) => {
     if (!dateStr) return '';
     const diffSeconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-    if (diffSeconds < 60) return 'Baru saja';
-    if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m lalu`;
-    if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}j lalu`;
-    return new Date(dateStr).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' });
+    if (diffSeconds < 60) return tx('Just now', 'Baru saja');
+    if (diffSeconds < 3600) return tx(`${Math.floor(diffSeconds / 60)}m ago`, `${Math.floor(diffSeconds / 60)}m lalu`);
+    if (diffSeconds < 86400) return tx(`${Math.floor(diffSeconds / 3600)}h ago`, `${Math.floor(diffSeconds / 3600)}j lalu`);
+    return new Date(dateStr).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { month: 'short', day: 'numeric' });
   };
 
   return (
@@ -83,7 +102,7 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
               <Bell size={18} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Notifikasi</h3>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>{tx('Notifications', 'Notifikasi')}</h3>
             </div>
           </div>
 
@@ -94,7 +113,7 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
                 className="btn btn-ghost btn-sm"
                 style={{ fontSize: '0.75rem', padding: '4px 8px', color: 'var(--color-text-dim)' }}
               >
-                Baca Semua
+                {tx('Mark All Read', 'Baca Semua')}
               </button>
             )}
             <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: '6px' }}>
@@ -108,14 +127,35 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
           {notifications.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--color-text-dim)' }}>
               <Bell size={36} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-              <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>Belum ada notifikasi</p>
-              <span style={{ fontSize: '0.8rem' }}>Undangan main dan permintaan teman akan muncul di sini.</span>
+              <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>{tx('No notifications yet', 'Belum ada notifikasi')}</p>
+              <span style={{ fontSize: '0.8rem' }}>{tx('Game invites and friend requests will appear here.', 'Undangan main dan permintaan teman akan muncul di sini.')}</span>
             </div>
           ) : (
             notifications.map(notif => {
               const isInvite = notif.type === 'INVITE';
               const isFriendRequest = notif.type === 'FRIEND_REQUEST';
+              const isNewFollower = notif.type === 'NEW_FOLLOWER';
               const handledStatus = handledMap[notif.id];
+              const senderName = notif.sender?.displayName || notif.data?.hostName || notif.data?.followerName || notif.data?.requesterName || notif.data?.accepterName || tx('Player', 'Pemain');
+              let displayTitle = notif.title;
+              let displayMessage = notif.message;
+              if (lang === 'en') {
+                if (notif.type === 'INVITE') {
+                  displayTitle = 'Game Invite';
+                  displayMessage = `${senderName} invited you to play in Room ${notif.data?.roomCode || ''} (${tCategory(notif.data?.category || 'Global Trends')})`;
+                } else if (notif.type === 'NEW_FOLLOWER') {
+                  displayTitle = notif.data?.isMutual ? 'New Mutual Friend!' : 'New Follower';
+                  displayMessage = notif.data?.isMutual
+                    ? `${senderName} followed you back — you are now Mutual!`
+                    : `${senderName} started following you on Spotinize.`;
+                } else if (notif.type === 'FRIEND_REQUEST') {
+                  displayTitle = 'Friend Request';
+                  displayMessage = `${senderName} wants to add you as a friend`;
+                } else if (notif.type === 'FRIEND_ACCEPTED') {
+                  displayTitle = 'Friend Request Accepted';
+                  displayMessage = `${senderName} accepted your friend request`;
+                }
+              }
 
               return (
                 <div
@@ -141,7 +181,7 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '6px' }}>
                         <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text-bright)' }}>
-                          {notif.title}
+                          {displayTitle}
                         </span>
                         <span style={{ fontSize: '0.7rem', color: 'var(--color-text-dim)', flexShrink: 0 }}>
                           {formatTime(notif.createdAt)}
@@ -149,7 +189,7 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
                       </div>
 
                       <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: '2px', lineHeight: 1.4 }}>
-                        {notif.message}
+                        {displayMessage}
                       </p>
                     </div>
                   </div>
@@ -164,8 +204,28 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
                         icon={<Play size={14} fill="#000" />}
                         style={{ height: '32px', fontSize: '0.8rem' }}
                       >
-                        Gabung Room [{notif.data.roomCode}]
+                        {tx('Join Room', 'Gabung Room')} [{notif.data.roomCode}]
                       </Button>
+                    </div>
+                  )}
+
+                  {/* New Follower quick Follow Back */}
+                  {isNewFollower && !notif.data?.isMutual && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                      {handledStatus === 'FOLLOWED_BACK' ? (
+                        <span className="badge badge-green" style={{ fontSize: '0.72rem' }}>{tx('Mutual ✓', 'Mutual ✓')}</span>
+                      ) : !notif.isRead ? (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={busyId === notif.id}
+                          onClick={() => handleFollowBack(notif)}
+                          icon={<UserPlus size={14} />}
+                          style={{ height: '32px', fontSize: '0.8rem' }}
+                        >
+                          {tx('Follow Back', 'Follow Back')}
+                        </Button>
+                      ) : null}
                     </div>
                   )}
 
@@ -173,9 +233,9 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
                   {isFriendRequest && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
                       {handledStatus === 'ACCEPTED' ? (
-                        <span className="badge badge-green" style={{ fontSize: '0.72rem' }}>Permintaan diterima ✓</span>
+                        <span className="badge badge-green" style={{ fontSize: '0.72rem' }}>{tx('Request accepted ✓', 'Permintaan diterima ✓')}</span>
                       ) : handledStatus === 'REJECTED' ? (
-                        <span className="badge badge-gray" style={{ fontSize: '0.72rem' }}>Permintaan ditolak</span>
+                        <span className="badge badge-gray" style={{ fontSize: '0.72rem' }}>{tx('Request declined', 'Permintaan ditolak')}</span>
                       ) : !notif.isRead ? (
                         <>
                           <Button
@@ -186,7 +246,7 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
                             icon={<Check size={14} />}
                             style={{ height: '32px', fontSize: '0.8rem' }}
                           >
-                            Terima
+                            {tx('Accept', 'Terima')}
                           </Button>
                           <Button
                             variant="secondary"
@@ -196,7 +256,7 @@ export function NotificationDrawer({ isOpen, onClose, notifications = [], onJoin
                             icon={<X size={14} />}
                             style={{ height: '32px', fontSize: '0.8rem' }}
                           >
-                            Tolak
+                            {tx('Decline', 'Tolak')}
                           </Button>
                         </>
                       ) : null}

@@ -10,11 +10,13 @@ import InGameSettingsModal from '../../components/InGameSettingsModal.jsx';
 import RoundResultModal from '../Result/RoundResultModal.jsx';
 import FinalResultPage from '../Result/FinalResultPage.jsx';
 import useGame from '../../hooks/useGame.js';
+import { useLanguage } from '../../hooks/useLanguage.jsx';
 import ApiClient from '../../services/api.js';
 import socketService from '../../services/socket.js';
 import audioPlayer from '../../services/audioPlayer.js';
 
 export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
+  const { t, tx, tCategory } = useLanguage();
   const {
     gameState,
     loading,
@@ -66,7 +68,7 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
     return (
       <div className="container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px' }}>
         <Loader2 className="spin" size={36} color="var(--color-primary)" />
-        <p style={{ fontWeight: 700 }}>Menyiapkan Arena Game...</p>
+        <p style={{ fontWeight: 700 }}>{tx('Preparing Game Arena...', 'Menyiapkan Arena Game...')}</p>
       </div>
     );
   }
@@ -74,10 +76,10 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
   if (error) {
     return (
       <div className="container-narrow" style={{ paddingTop: '40px', textAlign: 'center' }}>
-        <h3 style={{ color: 'var(--color-danger)', marginBottom: '12px' }}>Terjadi Kesalahan</h3>
+        <h3 style={{ color: 'var(--color-danger)', marginBottom: '12px' }}>{tx('An Error Occurred', 'Terjadi Kesalahan')}</h3>
         <p style={{ marginBottom: '20px' }}>{error}</p>
         <Button variant="secondary" onClick={onExitToDashboard} icon={<ArrowLeft size={18} />}>
-          Kembali ke Menu
+          {tx('Back to Menu', 'Kembali ke Menu')}
         </Button>
       </div>
     );
@@ -134,13 +136,13 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
 
               <div>
                 <span className="badge badge-green" style={{ marginBottom: '8px' }}>
-                  <Loader2 className="spin" size={12} /> Menunggu Pemain Lain
+                  <Loader2 className="spin" size={12} /> {tx('Waiting for Other Players', 'Menunggu Pemain Lain')}
                 </span>
                 <h2 style={{ fontSize: '1.6rem', fontWeight: 900, marginBottom: '6px' }}>
-                  Semua Lagu Selesai!
+                  {tx('All Songs Completed!', 'Semua Lagu Selesai!')}
                 </h2>
                 <p style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)' }}>
-                  Menunggu pemain lain menyelesaikan ronde terakhir...
+                  {tx('Waiting for other players to finish the final round...', 'Menunggu pemain lain menyelesaikan ronde terakhir...')}
                 </p>
               </div>
 
@@ -158,8 +160,11 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
                 <Users size={15} color="var(--color-primary)" />
                 <span>
                   {remainingPlayersCount > 0
-                    ? `${remainingPlayersCount} pemain masih menyelesaikan lagu`
-                    : 'Menghitung peringkat akhir...'}
+                    ? tx(
+                        `${remainingPlayersCount} player${remainingPlayersCount === 1 ? '' : 's'} still finishing songs`,
+                        `${remainingPlayersCount} pemain masih menyelesaikan lagu`
+                      )
+                    : tx('Calculating final rankings...', 'Menghitung peringkat akhir...')}
                 </span>
               </div>
 
@@ -176,7 +181,7 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
                   borderRadius: 'var(--radius-md)',
                   padding: '14px'
                 }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginBottom: '4px' }}>Skor Kamu</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginBottom: '4px' }}>{tx('Your Score', 'Skor Kamu')}</div>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.6rem', fontWeight: 900, color: 'var(--color-primary)' }}>
                     {gameState?.player?.score ?? 0}
                   </div>
@@ -234,7 +239,7 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
             {/* Round info */}
             <div>
               <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-dim)', textTransform: 'uppercase', display: 'block' }}>
-                {gameState?.category}
+                {tCategory(gameState?.category)}
               </span>
               <span style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--color-text-bright)' }}>
                 ROUND {gameState?.currentRound} / {gameState?.numberOfSongs}
@@ -261,7 +266,7 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                 <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-dim)', textTransform: 'uppercase' }}>
-                  Kesempatan
+                  {t('gameAttempts')}
                 </span>
                 <div style={{ display: 'flex', gap: '4px' }}>
                   {[1, 2, 3].map(attemptNum => (
@@ -282,7 +287,7 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
                 className="btn btn-secondary btn-sm"
-                title="Pengaturan Game"
+                title={t('gameSettingsTitle')}
                 style={{
                   padding: '8px',
                   width: '36px',
@@ -358,7 +363,7 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
               icon={<Search size={20} fill="#000" />}
               style={{ height: '56px', fontSize: '1.15rem' }}
             >
-              Tebak Judul Lagu
+              {t('gameGuessBtn')}
             </Button>
 
             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -370,7 +375,7 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
                 icon={<SkipForward size={16} />}
                 style={{ color: 'var(--color-text-dim)' }}
               >
-                Skip Lagu Ini (Skor: 0)
+                {t('gameSkipBtn')}
               </Button>
             </div>
           </div>

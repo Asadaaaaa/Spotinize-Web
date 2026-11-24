@@ -1,11 +1,13 @@
 import React from 'react';
 import { Music, Disc3 } from 'lucide-react';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function PreparingGameModal({
   isOpen = true,
   progress = 0,
   category = 'Global Trends'
 }) {
+  const { tx, tCategory } = useLanguage();
   if (!isOpen) return null;
 
   const clampedProgress = Math.min(100, Math.max(0, Math.round(progress)));
@@ -49,7 +51,7 @@ export function PreparingGameModal({
 
         {/* Modal Title */}
         <h3 style={{ fontSize: '1.45rem', fontWeight: 900, marginBottom: '20px', letterSpacing: '-0.01em', color: 'var(--color-text-bright)' }}>
-          Mempersiapkan Game
+          {tx('Preparing Game', 'Mempersiapkan Game')}
         </h3>
 
         {/* Loading Progress Bar */}
@@ -102,7 +104,7 @@ export function PreparingGameModal({
           color: 'var(--color-text-dim)'
         }}>
           <Music size={14} color="var(--color-primary)" />
-          <span>Kategori: <strong>{category}</strong></span>
+          <span>{tx('Category:', 'Kategori:')} <strong>{tCategory(category)}</strong></span>
         </div>
       </div>
     </div>

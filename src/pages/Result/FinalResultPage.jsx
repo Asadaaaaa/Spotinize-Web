@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Trophy, RotateCcw, Share2, Music2, Clock, CheckCircle2, XCircle, AlertCircle, Award } from 'lucide-react';
+import { Trophy, RotateCcw, Share2, Swords, Check, Loader2 } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import ShareInstagramModal from '../../components/ShareInstagramModal.jsx';
 import Avatar from '../../components/Avatar.jsx';
+import ApiClient from '../../services/api.js';
+import { useLanguage } from '../../hooks/useLanguage.jsx';
 
 export function FinalResultPage({ gameState, user, onPlayAgain }) {
+  const { tx, tCategory } = useLanguage();
   const [showShareModal, setShowShareModal] = useState(false);
+  const [sharingChallenge, setSharingChallenge] = useState(false);
+  const [challengeShared, setChallengeShared] = useState(false);
 
   const player = gameState?.player || {};
   const isMultiplayer = gameState?.mode === 'MULTIPLAYER';
@@ -81,7 +86,7 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
             {myScore}
           </span>
           <span style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>
-            Kategori: {gameState?.category}
+            {tx('Category:', 'Kategori:')} {tCategory(gameState?.category)}
           </span>
         </Card>
 
@@ -93,7 +98,7 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
           gap: '12px'
         }}>
           <Card style={{ padding: '16px 12px' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginBottom: '4px' }}>Total Lagu</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginBottom: '4px' }}>{tx('Total Songs', 'Total Lagu')}</div>
             <div style={{ fontSize: '1.3rem', fontWeight: 800 }}>{gameState?.numberOfSongs || 5}</div>
           </Card>
 
@@ -109,7 +114,7 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
         {isMultiplayer && leaderboard.length > 0 && (
           <div style={{ width: '100%', textAlign: 'left' }}>
             <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '10px' }}>
-              Peringkat Akhir
+              {tx('Final Rankings', 'Peringkat Akhir')}
             </span>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -170,8 +175,36 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
             icon={<Share2 size={20} />}
             style={{ height: '54px', fontSize: '1.15rem' }}
           >
-            Share ke Instagram Story
+            {tx('Share to Instagram Story', 'Share ke Instagram Story')}
           </Button>
+
+          {gameState?.id && (
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              disabled={sharingChallenge || challengeShared}
+              onClick={async () => {
+                try {
+                  setSharingChallenge(true);
+                  await ApiClient.post('/feed/challenges', { sourceGameId: gameState.id });
+                  setChallengeShared(true);
+                } catch (e) {
+                } finally {
+                  setSharingChallenge(false);
+                }
+              }}
+              icon={
+                sharingChallenge ? <Loader2 size={18} className="spin" /> :
+                challengeShared ? <Check size={18} color="var(--color-primary)" /> :
+                <Swords size={18} color="var(--color-primary)" />
+              }
+            >
+              {challengeShared
+                ? tx('Challenge Shared to Feed ✓', 'Tantangan Dibagikan ke Feed ✓')
+                : tx('Share Challenge to Feed', 'Bagikan Tantangan ke Feed')}
+            </Button>
+          )}
 
           <Button
             variant="secondary"
@@ -180,7 +213,7 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
             onClick={onPlayAgain}
             icon={<RotateCcw size={18} />}
           >
-            Main Lagi
+            {tx('Play Again', 'Main Lagi')}
           </Button>
         </div>
       </div>

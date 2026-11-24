@@ -7,6 +7,7 @@ import Button from './Button.jsx';
 import Avatar from './Avatar.jsx';
 import VinylArt from './VinylArt.jsx';
 import ApiClient from '../services/api.js';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 const AVATAR_PRESETS = [
   { id: 'bot_star', label: 'Star', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=StarVibe' },
@@ -20,18 +21,18 @@ const AVATAR_PRESETS = [
 ];
 
 // Helper to compress client-side uploaded images to fast Base64 Data URL
-function processImageFile(file) {
+function processImageFile(file, tx) {
   return new Promise((resolve, reject) => {
     if (!file) return reject(new Error('No file provided'));
     if (!file.type.startsWith('image/')) {
-      return reject(new Error('File harus berupa gambar (JPG, PNG, WEBP, dll)'));
+      return reject(new Error(tx('File must be an image (JPG, PNG, WEBP, etc.)', 'File harus berupa gambar (JPG, PNG, WEBP, dll)')));
     }
 
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Gagal membaca file'));
+    reader.onerror = () => reject(new Error(tx('Failed to read file', 'Gagal membaca file')));
     reader.onload = (e) => {
       const img = new window.Image();
-      img.onerror = () => reject(new Error('Gagal memproses gambar'));
+      img.onerror = () => reject(new Error(tx('Failed to process image', 'Gagal memproses gambar')));
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const MAX_SIZE = 360;
@@ -72,6 +73,7 @@ function cleanSpotifyInput(input) {
 }
 
 export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
+  const { tx } = useLanguage();
   const [displayName, setDisplayName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [bio, setBio] = useState('');
@@ -176,10 +178,10 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
     try {
       setUploadingAvatar(true);
       setError('');
-      const dataUrl = await processImageFile(file);
+      const dataUrl = await processImageFile(file, tx);
       setAvatarUrl(dataUrl);
     } catch (err) {
-      setError(err.message || 'Gagal memproses file foto');
+      setError(err.message || tx('Failed to process image file', 'Gagal memproses file foto'));
     } finally {
       setUploadingAvatar(false);
     }
@@ -190,7 +192,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!displayName.trim()) {
-      setError('Nama tampilan tidak boleh kosong');
+      setError(tx('Display name cannot be empty', 'Nama tampilan tidak boleh kosong'));
       return;
     }
 
@@ -224,7 +226,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
         }, 500);
       }
     } catch (err) {
-      setError(err.message || 'Gagal menyimpan perubahan profil');
+      setError(err.message || tx('Failed to save profile changes', 'Gagal menyimpan perubahan profil'));
     } finally {
       setSaving(false);
     }
@@ -256,9 +258,9 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
           backgroundColor: 'var(--color-surface)'
         }}>
           <div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Edit Profil</h3>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>{tx('Edit Profile', 'Edit Profil')}</h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              Upload foto sendiri, perbarui bio, akun Spotify, dan lagu favorit
+              {tx('Upload your own photo, update bio, Spotify account, and favorite song', 'Upload foto sendiri, perbarui bio, akun Spotify, dan lagu favorit')}
             </p>
           </div>
           <button 
@@ -301,14 +303,14 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
               alignItems: 'center',
               gap: '8px'
             }}>
-              <Check size={18} /> Profil berhasil diperbarui!
+              <Check size={18} /> {tx('Profile updated successfully!', 'Profil berhasil diperbarui!')}
             </div>
           )}
 
           {/* 1. Foto Profil (Avatar) Selection & Upload */}
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-bright)', textTransform: 'uppercase', marginBottom: '10px' }}>
-              Foto Profil
+              {tx('Profile Photo', 'Foto Profil')}
             </label>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '14px' }}>
@@ -343,7 +345,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                     className={`btn btn-sm ${avatarMode === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
                     style={{ fontSize: '0.76rem', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                   >
-                    <Upload size={13} /> Upload Foto
+                    <Upload size={13} /> {tx('Upload Photo', 'Upload Foto')}
                   </button>
                   <button
                     type="button"
@@ -351,7 +353,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                     className={`btn btn-sm ${avatarMode === 'presets' ? 'btn-primary' : 'btn-secondary'}`}
                     style={{ fontSize: '0.76rem', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                   >
-                    <Sparkles size={13} /> Karakter
+                    <Sparkles size={13} /> {tx('Characters', 'Karakter')}
                   </button>
                   <button
                     type="button"
@@ -363,9 +365,9 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                   </button>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                  {avatarMode === 'upload' && 'Pilih foto dari galeri/kamera perangkatmu'}
-                  {avatarMode === 'presets' && 'Gunakan avatar karakter unik Spotinize'}
-                  {avatarMode === 'url' && 'Masukkan link direct URL foto gambar'}
+                  {avatarMode === 'upload' && tx('Choose a photo from your device gallery/camera', 'Pilih foto dari galeri/kamera perangkatmu')}
+                  {avatarMode === 'presets' && tx('Use a unique Spotinize character avatar', 'Gunakan avatar karakter unik Spotinize')}
+                  {avatarMode === 'url' && tx('Enter a direct image URL link', 'Masukkan link direct URL foto gambar')}
                 </span>
               </div>
             </div>
@@ -410,10 +412,10 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                   </div>
                   <div>
                     <span style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--color-text-bright)' }}>
-                      Klik untuk Pilih Foto dari Perangkat
+                      {tx('Click to Choose Photo from Device', 'Klik untuk Pilih Foto dari Perangkat')}
                     </span>
                     <p style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', margin: '2px 0 0 0' }}>
-                      Format JPG, PNG, WEBP (otomatis dipotong pas & dioptimalkan)
+                      {tx('JPG, PNG, WEBP format (automatically cropped & optimized)', 'Format JPG, PNG, WEBP (otomatis dipotong pas & dioptimalkan)')}
                     </p>
                   </div>
                 </div>
@@ -471,7 +473,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                 <input
                   type="url"
                   className="input"
-                  placeholder="https://images.unsplash.com/... atau link foto"
+                  placeholder={tx('https://images.unsplash.com/... or photo link', 'https://images.unsplash.com/... atau link foto')}
                   value={customAvatarInput}
                   onChange={(e) => {
                     setCustomAvatarInput(e.target.value);
@@ -486,7 +488,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
           {/* 2. Display Name */}
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-bright)', textTransform: 'uppercase', marginBottom: '6px' }}>
-              Nama Tampilan (Display Name)
+              {tx('Display Name', 'Nama Tampilan (Display Name)')}
             </label>
             <input
               type="text"
@@ -499,7 +501,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
               style={{ fontSize: '0.95rem' }}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-              <span>Nama yang terlihat di game, leaderboard, dan profil publik</span>
+              <span>{tx('Name visible in games, leaderboard, and public profile', 'Nama yang terlihat di game, leaderboard, dan profil publik')}</span>
               <span>{displayName.length}/30</span>
             </div>
           </div>
@@ -513,13 +515,13 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
               className="input"
               value={bio}
               onChange={(e) => setBio(e.target.value)}
-              placeholder="Ceritakan selera musikmu, genre favorit, atau kutipan lirik kesukaan..."
+              placeholder={tx('Tell us about your music taste, favorite genre, or favorite lyrics...', 'Ceritakan selera musikmu, genre favorit, atau kutipan lirik kesukaan...')}
               maxLength={160}
               rows={3}
               style={{ fontSize: '0.9rem', resize: 'vertical', lineHeight: 1.45 }}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-              <span>Maksimal 160 karakter</span>
+              <span>{tx('Max 160 characters', 'Maksimal 160 karakter')}</span>
               <span>{bio.length}/160</span>
             </div>
           </div>
@@ -527,7 +529,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
           {/* 4. Spotify Profile Link */}
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-bright)', textTransform: 'uppercase', marginBottom: '6px' }}>
-              Akun Profil Spotify
+              {tx('Spotify Profile Account', 'Akun Profil Spotify')}
             </label>
             <div style={{ position: 'relative' }}>
               <Globe size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-primary)' }} />
@@ -536,12 +538,12 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                 className="input"
                 value={spotifyUrl}
                 onChange={(e) => setSpotifyUrl(e.target.value)}
-                placeholder="https://open.spotify.com/user/... atau username Spotify kamu"
+                placeholder={tx('https://open.spotify.com/user/... or your Spotify username', 'https://open.spotify.com/user/... atau username Spotify kamu')}
                 style={{ paddingLeft: '38px', fontSize: '0.9rem' }}
               />
             </div>
             <span style={{ display: 'block', marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-              Link langsung profil Spotify kamu agar pemain lain bisa follow & dengar playlist kamu
+              {tx('Direct link to your Spotify profile so other players can follow & listen to your playlists', 'Link langsung profil Spotify kamu agar pemain lain bisa follow & dengar playlist kamu')}
             </span>
           </div>
 
@@ -549,7 +551,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <label style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-bright)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Music size={16} color="var(--color-primary)" /> Lagu Favorit
+                <Music size={16} color="var(--color-primary)" /> {tx('Favorite Song', 'Lagu Favorit')}
               </label>
               {favoriteSong && (
                 <button
@@ -558,7 +560,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                   className="btn btn-ghost btn-sm"
                   style={{ fontSize: '0.75rem', color: '#f87171', padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                 >
-                  <Trash2 size={13} /> Hapus
+                  <Trash2 size={13} /> {tx('Remove', 'Hapus')}
                 </button>
               )}
             </div>
@@ -598,7 +600,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                   className="btn btn-secondary btn-sm"
                   style={{ fontSize: '0.78rem' }}
                 >
-                  Ganti
+                  {tx('Change', 'Ganti')}
                 </button>
               </div>
             ) : (
@@ -620,8 +622,8 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                 }}
               >
                 <Music size={24} color="var(--color-primary)" />
-                <span style={{ fontWeight: 700, color: 'var(--color-text-bright)' }}>+ Pilih Lagu Favorit Kamu</span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>Cari dari katalog jutaan lagu Spotify</span>
+                <span style={{ fontWeight: 700, color: 'var(--color-text-bright)' }}>{tx('+ Choose Your Favorite Song', '+ Pilih Lagu Favorit Kamu')}</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>{tx('Search from millions of songs in Spotify catalog', 'Cari dari katalog jutaan lagu Spotify')}</span>
               </div>
             )}
 
@@ -639,7 +641,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
-                    Cari Lagu di Spotify
+                    {tx('Search Song on Spotify', 'Cari Lagu di Spotify')}
                   </span>
                   <button
                     type="button"
@@ -647,7 +649,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                     className="btn btn-ghost btn-sm"
                     style={{ padding: '2px 6px', fontSize: '0.75rem' }}
                   >
-                    Tutup
+                    {tx('Close', 'Tutup')}
                   </button>
                 </div>
 
@@ -658,7 +660,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                     className="input"
                     value={songQuery}
                     onChange={(e) => setSongQuery(e.target.value)}
-                    placeholder="Ketik judul lagu atau nama penyanyi..."
+                    placeholder={tx('Type a song title or artist name...', 'Ketik judul lagu atau nama penyanyi...')}
                     style={{ paddingLeft: '34px', fontSize: '0.88rem' }}
                     autoFocus
                   />
@@ -708,14 +710,14 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
                             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>{track.artist}</div>
                           </div>
                         </div>
-                        <span className="badge badge-green" style={{ fontSize: '0.65rem', flexShrink: 0 }}>Pilih</span>
+                        <span className="badge badge-green" style={{ fontSize: '0.65rem', flexShrink: 0 }}>{tx('Select', 'Pilih')}</span>
                       </div>
                     );
                   })}
 
                   {songQuery && searchResults.length === 0 && !isSearchingSong && (
                     <div style={{ textAlign: 'center', padding: '16px', fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-                      Lagu "{songQuery}" tidak ditemukan
+                      {tx(`Song "${songQuery}" not found`, `Lagu "${songQuery}" tidak ditemukan`)}
                     </div>
                   )}
                 </div>
@@ -731,7 +733,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
               onClick={onClose}
               disabled={saving}
             >
-              Batal
+              {tx('Cancel', 'Batal')}
             </Button>
             <Button
               type="submit"
@@ -739,7 +741,7 @@ export function EditProfileModal({ isOpen, onClose, user, onProfileUpdated }) {
               disabled={saving || !displayName.trim()}
               icon={saving ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
             >
-              {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+              {saving ? tx('Saving...', 'Menyimpan...') : tx('Save Changes', 'Simpan Perubahan')}
             </Button>
           </div>
         </form>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, FastForward, Loader2 } from 'lucide-react';
 import Button from './Button.jsx';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 const REVEAL_STAGES = [0.1, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0];
 
@@ -13,6 +14,7 @@ export function AudioCluePlayer({
   onPlay,
   onRevealNext
 }) {
+  const { tx } = useLanguage();
   const currentIndex = REVEAL_STAGES.indexOf(Number(revealLevel));
   const hasNextReveal = currentIndex >= 0 && currentIndex < REVEAL_STAGES.length - 1;
   const nextStage = hasNextReveal ? REVEAL_STAGES[currentIndex + 1] : null;
@@ -108,9 +110,9 @@ export function AudioCluePlayer({
           )}
         >
           {isAudioLoading 
-            ? 'Memuat Audio...' 
+            ? tx('Loading Audio...', 'Memuat Audio...') 
             : isPlaying 
-              ? `Memutar ${revealLevel}s...` 
+              ? tx(`Playing ${revealLevel}s...`, `Memutar ${revealLevel}s...`) 
               : `PLAY ${revealLevel}s`}
         </Button>
 
@@ -122,7 +124,7 @@ export function AudioCluePlayer({
             disabled={disabled || isPlaying || isAudioLoading}
             onClick={onRevealNext}
             style={{ flex: '1 1 140px', minWidth: '130px', height: '52px' }}
-            title={isPlaying ? 'Tunggu audio selesai' : `Buka clue ${nextStage}s`}
+            title={isPlaying ? tx('Wait for audio to finish', 'Tunggu audio selesai') : tx(`Unlock ${nextStage}s clue`, `Buka clue ${nextStage}s`)}
             icon={<FastForward size={18} />}
           >
             Reveal {nextStage}s
@@ -132,7 +134,7 @@ export function AudioCluePlayer({
 
       {/* Subtext info */}
       <p style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', textAlign: 'center' }}>
-        {isPlaying ? 'Dengarkan baik-baik potongan lagunya...' : 'Klik Play untuk mulai dan menghitung waktu.'}
+        {isPlaying ? tx('Listen carefully to the song snippet...', 'Dengarkan baik-baik potongan lagunya...') : tx('Click Play to start and begin the timer.', 'Klik Play untuk mulai dan menghitung waktu.')}
       </p>
     </div>
   );

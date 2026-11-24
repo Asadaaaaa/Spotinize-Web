@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle2, XCircle, AlertCircle, ArrowRight, Music2 } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import VinylArt from '../../components/VinylArt.jsx';
+import { useLanguage } from '../../hooks/useLanguage.jsx';
 
 export function RoundResultModal({
   isOpen,
@@ -11,6 +12,7 @@ export function RoundResultModal({
   totalRounds = 5,
   onNextRound
 }) {
+  const { tx } = useLanguage();
   if (!isOpen || !revealedTrack) return null;
 
   const isCorrect = status === 'GUESSED';
@@ -35,17 +37,17 @@ export function RoundResultModal({
         <div>
           {isCorrect && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} className="badge badge-green">
-              <CheckCircle2 size={16} /> TEBAKAN BENAR
+              <CheckCircle2 size={16} /> {tx('CORRECT GUESS', 'TEBAKAN BENAR')}
             </div>
           )}
           {isWrong && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} className="badge badge-red">
-              <XCircle size={16} /> WAKTU HABIS
+              <XCircle size={16} /> {tx('OUT OF ATTEMPTS', 'WAKTU HABIS')}
             </div>
           )}
           {isSkipped && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} className="badge badge-gray">
-              <AlertCircle size={16} /> LAGU DILEWATI
+              <AlertCircle size={16} /> {tx('SONG SKIPPED', 'LAGU DILEWATI')}
             </div>
           )}
         </div>
@@ -88,7 +90,7 @@ export function RoundResultModal({
           icon={<ArrowRight size={20} />}
           style={{ height: '52px', fontSize: '1.1rem' }}
         >
-          {currentRound >= totalRounds ? 'Lihat Hasil Akhir' : 'Lagu Berikutnya'}
+          {currentRound >= totalRounds ? tx('View Final Result', 'Lihat Hasil Akhir') : tx('Next Song', 'Lagu Berikutnya')}
         </Button>
       </div>
     </div>

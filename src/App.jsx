@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from './components/Navbar.jsx';
+import AppShell from './components/AppShell.jsx';
 import LandingPage from './pages/Landing/LandingPage.jsx';
 import DashboardPage from './pages/Dashboard/DashboardPage.jsx';
+import SearchPage from './pages/Search/SearchPage.jsx';
 import RoomLobbyPage from './pages/RoomLobby/RoomLobbyPage.jsx';
 import GamePage from './pages/Game/GamePage.jsx';
 import ProfilePage from './pages/Profile/ProfilePage.jsx';
@@ -9,8 +11,13 @@ import FriendsPage from './pages/Friends/FriendsPage.jsx';
 import GlobalLeaderboardPage from './pages/Dashboard/GlobalLeaderboardPage.jsx';
 import NotificationDrawer from './components/NotificationDrawer.jsx';
 import NotificationToast from './components/NotificationToast.jsx';
+import PostComposerModal from './components/PostComposerModal.jsx';
+import SavedSongsModal from './components/SavedSongsModal.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
 import { useDialog } from './hooks/useDialog.jsx';
+import { useLanguage } from './hooks/useLanguage.jsx';
+import { TrackDetailProvider } from './hooks/useTrackDetail.jsx';
+import { useVersionCheck } from './hooks/useVersionCheck.js';
 import ApiClient from './services/api.js';
 import socketService from './services/socket.js';
 
@@ -38,6 +45,9 @@ function getRouteFromLocation() {
   if (path === '/main' || path === '/main/') {
     return { tab: 'dashboard' };
   }
+  if (path === '/search' || path === '/search/') {
+    return { tab: 'search' };
+  }
   if (path === '/leaderboard' || path === '/leaderboard/') {
     return { tab: 'leaderboard' };
   }
@@ -51,6 +61,8 @@ function getPathForTab(tab) {
   switch (tab) {
     case 'dashboard':
       return '/main';
+    case 'search':
+      return '/search';
     case 'leaderboard':
       return '/leaderboard';
     case 'friends':
@@ -74,8 +86,10 @@ function clearActiveSession() {
 }
 
 export function App() {
+  useVersionCheck();
   const { user, rawUser, refreshUser, isAuthChecking } = useAuth();
   const { showAlert, showConfirm } = useDialog();
+  const { tx } = useLanguage();
   const [currentTab, setCurrentTab] = useState(() => {
     const route = getRouteFromLocation();
     if (route.tab === 'public-profile') return 'dashboard';
@@ -97,7 +111,41 @@ export function App() {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [activeToastInvite, setActiveToastInvite] = useState(null);
 
+  // Feed Composer & Saved Songs State
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [composerInitialTrack, setComposerInitialTrack] = useState(null);
+  const [isSavedSongsOpen, setIsSavedSongsOpen] = useState(false);
+  const [latestCreatedPost, setLatestCreatedPost] = useState(null);
+
   const currentUser = user || rawUser;
+
+  // Handle Spotify Opt-In OAuth callback (/auth/callback?code=...&state=...)
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path !== '/auth/callback') return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    if (!code) {
+      window.history.replaceState({}, '', '/main');
+      setCurrentTab('dashboard');
+      return;
+    }
+
+    ApiClient.post('/auth/spotify/callback', { code, state })
+      .then((res) => {
+        if (res?.user && refreshUser) {
+          refreshUser();
+        }
+        window.history.replaceState({}, '', '/main');
+        setCurrentTab('profile');
+      })
+      .catch((err) => {
+        setAuthError(err.message || 'Gagal menghubungkan Spotify');
+        window.history.replaceState({}, '', '/main');
+        setCurrentTab('profile');
+      });
+  }, [refreshUser]);
 
   // Handle browser back/forward URL changes
   useEffect(() => {
@@ -126,6 +174,8 @@ export function App() {
     const isProtectedPath =
       path === '/main' ||
       path === '/main/' ||
+      path === '/search' ||
+      path === '/search/' ||
       path === '/leaderboard' ||
       path === '/leaderboard/' ||
       path === '/friends' ||
@@ -318,8 +368,8 @@ export function App() {
       });
       handleJoinRoom(res);
     } catch (err) {
-      await showAlert('Gagal bergabung ke room: ' + err.message, {
-        title: 'Gagal Bergabung',
+      await showAlert(tx('Failed to join room: ', 'Gagal bergabung ke room: ') + err.message, {
+        title: tx('Failed to Join', 'Gagal Bergabung'),
         variant: 'danger'
       });
     }
@@ -327,8 +377,8 @@ export function App() {
 
   const handleStartDuelWithPlayer = async (targetUser) => {
     if (!currentUser?.id) {
-      await showAlert('Silakan login terlebih dahulu untuk mengajak duel.', {
-        title: 'Login Diperlukan',
+      await showAlert(tx('Please log in first to challenge a player.', 'Silakan login terlebih dahulu untuk mengajak duel.'), {
+        title: tx('Login Required', 'Login Diperlukan'),
         variant: 'info'
       });
       setAuthModal('LOGIN');
@@ -361,8 +411,8 @@ export function App() {
 
       handleJoinRoom(res);
     } catch (e) {
-      await showAlert('Gagal memulai room duel: ' + e.message, {
-        title: 'Gagal Memulai Duel',
+      await showAlert(tx('Failed to start duel room: ', 'Gagal memulai room duel: ') + e.message, {
+        title: tx('Failed to Start Duel', 'Gagal Memulai Duel'),
         variant: 'danger'
       });
     }
@@ -438,7 +488,7 @@ export function App() {
             alignItems: 'center'
           }}>
             <span>{authError}</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => setAuthError(null)} style={{ padding: '4px 8px' }}>Tutup</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setAuthError(null)} style={{ padding: '4px 8px' }}>{tx('Close', 'Tutup')}</button>
           </div>
         </div>
       )}
@@ -459,6 +509,8 @@ export function App() {
           targetUsername={publicProfileUsername}
           user={currentUser}
           onStartDuel={handleStartDuelWithPlayer}
+          onOpenPublicProfile={handleNavigateToPublicProfile}
+          onPlayChallenge={handleGameCreated}
           onBack={handleExitPublicProfile}
         />
       );
@@ -502,6 +554,18 @@ export function App() {
           user={currentUser}
           targetUsername={currentUser?.username}
           onStartDuel={handleStartDuelWithPlayer}
+          onOpenPublicProfile={handleNavigateToPublicProfile}
+          onPlayChallenge={handleGameCreated}
+        />
+      );
+    }
+
+    if (currentTab === 'search') {
+      return (
+        <SearchPage
+          user={currentUser}
+          onOpenPublicProfile={handleNavigateToPublicProfile}
+          onPlayChallenge={handleGameCreated}
         />
       );
     }
@@ -531,83 +595,122 @@ export function App() {
         user={currentUser}
         onGameCreated={handleGameCreated}
         onJoinRoom={handleJoinRoom}
+        latestCreatedPost={latestCreatedPost}
+        onOpenPublicProfile={handleNavigateToPublicProfile}
       />
     );
   };
 
+  const handleOpenComposer = (initialTrack = null) => {
+    setComposerInitialTrack(initialTrack);
+    setIsComposerOpen(true);
+  };
+
+  const handleNavigate = async (tab) => {
+    if (tab === 'login') {
+      setAuthModal('LOGIN');
+      return;
+    }
+    if (tab === 'register') {
+      setAuthModal('REGISTER');
+      return;
+    }
+
+    const activeTargetId = (activeGameId && !isActiveGameFinished)
+      ? activeGameId
+      : (lobbyGame?.id || null);
+
+    if (activeTargetId) {
+      const msg = lobbyGame
+        ? tx('You are currently in a Room Lobby. Are you sure you want to leave?', 'Kamu sedang berada di Room Lobby. Yakin mau keluar?')
+        : tx('A game is in progress. Are you sure you want to leave to the menu?', 'Game sedang berlangsung. Yakin mau keluar ke menu?');
+      const confirmed = await showConfirm(msg, {
+        title: lobbyGame ? tx('Leave Room Lobby', 'Keluar Room Lobby') : tx('Leave Game', 'Keluar Game'),
+        variant: 'danger',
+        confirmText: tx('Yes, Leave', 'Ya, Keluar'),
+        cancelText: tx('Cancel', 'Batal')
+      });
+      if (!confirmed) {
+        return;
+      }
+      try {
+        await ApiClient.post(`/game/${activeTargetId}/leave`);
+      } catch (e) {}
+      try {
+        socketService.getSocket().emit('game:leave_room', { gameId: activeTargetId });
+      } catch (e) {}
+      setActiveGameId(null);
+      setLobbyGame(null);
+      setIsActiveGameFinished(false);
+      clearActiveSession();
+    } else if (activeGameId && isActiveGameFinished) {
+      setActiveGameId(null);
+      setLobbyGame(null);
+      setIsActiveGameFinished(false);
+      clearActiveSession();
+    }
+
+    if (tab === 'profile' && currentUser?.username) {
+      handleNavigateToPublicProfile(currentUser.username);
+      return;
+    }
+    if (publicProfileUsername) {
+      setPublicProfileUsername(null);
+    }
+
+    const nextTab = !currentUser && tab !== 'landing' ? 'landing' : tab;
+    const targetPath = getPathForTab(nextTab);
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({}, '', targetPath);
+    }
+    setCurrentTab(nextTab);
+  };
+
+  const activeNavTab = publicProfileUsername
+    ? (publicProfileUsername === currentUser?.username ? 'profile' : '')
+    : currentTab;
+
+  const useThreeColumnShell = Boolean(
+    currentUser &&
+    (publicProfileUsername || currentTab !== 'landing')
+  );
+
   return (
+    <TrackDetailProvider>
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--color-bg)' }}>
-      <Navbar
-        currentTab={publicProfileUsername ? (publicProfileUsername === currentUser?.username ? 'profile' : '') : currentTab}
-        unreadCount={unreadCount}
-        onOpenNotifications={() => {
-          setIsNotificationOpen(true);
-          loadNotifications();
-        }}
-        onNavigate={async (tab) => {
-          if (tab === 'login') {
-            setAuthModal('LOGIN');
-            return;
-          }
-          if (tab === 'register') {
-            setAuthModal('REGISTER');
-            return;
-          }
+      {useThreeColumnShell ? (
+        <AppShell
+          currentTab={activeNavTab}
+          unreadCount={unreadCount}
+          onNavigate={handleNavigate}
+          onOpenNotifications={() => {
+            setIsNotificationOpen(true);
+            loadNotifications();
+          }}
+          onOpenComposer={() => handleOpenComposer(null)}
+          onOpenSavedSongs={() => setIsSavedSongsOpen(true)}
+          onOpenPublicProfile={handleNavigateToPublicProfile}
+        >
+          {renderContent()}
+        </AppShell>
+      ) : (
+        <>
+          <Navbar
+            currentTab={activeNavTab}
+            unreadCount={unreadCount}
+            hideNavLinks={currentTab === 'landing'}
+            onOpenNotifications={() => {
+              setIsNotificationOpen(true);
+              loadNotifications();
+            }}
+            onNavigate={handleNavigate}
+          />
 
-          const activeTargetId = (activeGameId && !isActiveGameFinished)
-            ? activeGameId
-            : (lobbyGame?.id || null);
-
-          if (activeTargetId) {
-            const msg = lobbyGame
-              ? 'Kamu sedang berada di Room Lobby. Yakin mau keluar?'
-              : 'Game sedang berlangsung. Yakin mau keluar ke menu?';
-            const confirmed = await showConfirm(msg, {
-              title: lobbyGame ? 'Keluar Room Lobby' : 'Keluar Game',
-              variant: 'danger',
-              confirmText: 'Ya, Keluar',
-              cancelText: 'Batal'
-            });
-            if (!confirmed) {
-              return;
-            }
-            try {
-              await ApiClient.post(`/game/${activeTargetId}/leave`);
-            } catch (e) {}
-            try {
-              socketService.getSocket().emit('game:leave_room', { gameId: activeTargetId });
-            } catch (e) {}
-            setActiveGameId(null);
-            setLobbyGame(null);
-            setIsActiveGameFinished(false);
-            clearActiveSession();
-          } else if (activeGameId && isActiveGameFinished) {
-            setActiveGameId(null);
-            setLobbyGame(null);
-            setIsActiveGameFinished(false);
-            clearActiveSession();
-          }
-
-          if (tab === 'profile' && currentUser?.username) {
-            handleNavigateToPublicProfile(currentUser.username);
-            return;
-          }
-          if (publicProfileUsername) {
-            setPublicProfileUsername(null);
-          }
-
-          const nextTab = !currentUser && tab !== 'landing' ? 'landing' : tab;
-          const targetPath = getPathForTab(nextTab);
-          if (window.location.pathname !== targetPath) {
-            window.history.pushState({}, '', targetPath);
-          }
-          setCurrentTab(nextTab);
-        }}
-      />
-
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {renderContent()}
-      </main>
+          <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            {renderContent()}
+          </main>
+        </>
+      )}
 
       {/* Floating In-App Live Invitation Toast */}
       {activeToastInvite && (
@@ -631,7 +734,31 @@ export function App() {
         }}
         onRefresh={loadNotifications}
       />
+
+      {/* Music Post Composer Modal */}
+      <PostComposerModal
+        isOpen={isComposerOpen}
+        initialTrack={composerInitialTrack}
+        onClose={() => {
+          setIsComposerOpen(false);
+          setComposerInitialTrack(null);
+        }}
+        onPostCreated={(newPost) => {
+          setLatestCreatedPost(newPost);
+          if (currentTab !== 'dashboard') {
+            handleGoToMain();
+          }
+        }}
+      />
+
+      {/* Saved Songs / Bookmarks Modal */}
+      <SavedSongsModal
+        isOpen={isSavedSongsOpen}
+        onClose={() => setIsSavedSongsOpen(false)}
+        onPostTrack={(track) => handleOpenComposer(track)}
+      />
     </div>
+    </TrackDetailProvider>
   );
 }
 

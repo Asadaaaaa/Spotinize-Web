@@ -7,6 +7,7 @@ import {
 import Button from './Button.jsx';
 import Avatar from './Avatar.jsx';
 import Logo from './Logo.jsx';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function ShareInstagramModal({
   isOpen,
@@ -22,6 +23,7 @@ export function ShareInstagramModal({
   rank = 1,
   tracks = []
 }) {
+  const { tx, tCategory } = useLanguage();
   const cardRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -31,6 +33,9 @@ export function ShareInstagramModal({
   const isProfileMode = mode === 'PROFILE';
   const isMultiplayerMode = mode === 'MULTIPLAYER';
   const isSoloMode = !isProfileMode && !isMultiplayerMode;
+  const isLocalHost = typeof window === 'undefined' || !window.location?.host || /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.host);
+  const siteDomain = isLocalHost ? 'spotinize.hopto.org' : window.location.host;
+  const siteOrigin = isLocalHost ? 'https://spotinize.hopto.org' : window.location.origin;
 
   const handleDownload = async () => {
     if (!cardRef.current) return;
@@ -54,8 +59,8 @@ export function ShareInstagramModal({
 
   const handleCopyLink = () => {
     const url = isProfileMode && user?.username
-      ? `${window.location.origin}/user/${user.username}`
-      : 'https://bit.ly/spotinize';
+      ? `${siteOrigin}/user/${user.username}`
+      : siteOrigin;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -82,10 +87,14 @@ export function ShareInstagramModal({
         <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>
-              {isProfileMode ? 'Share Profil ke Story' : (isMultiplayerMode ? 'Share Hasil Duel Multiplayer' : 'Share Skor Game Solo')}
+              {isProfileMode
+                ? tx('Share Profile to Story', 'Share Profil ke Story')
+                : isMultiplayerMode
+                  ? tx('Share Multiplayer Duel Result', 'Share Hasil Duel Multiplayer')
+                  : tx('Share Solo Game Score', 'Share Skor Game Solo')}
             </h3>
             <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              Story card 9:16 siap posting ke Instagram Story
+              {tx('9:16 story card ready to post to Instagram Story', 'Story card 9:16 siap posting ke Instagram Story')}
             </p>
           </div>
           <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: '6px' }}>
@@ -116,20 +125,6 @@ export function ShareInstagramModal({
           {/* ==================== 1. TOP BRAND HEADER ==================== */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
             <Logo size="sm" />
-
-            <div style={{
-              backgroundColor: '#181820',
-              border: '1px solid #282834',
-              padding: '3px 8px',
-              borderRadius: '999px',
-              fontSize: '0.62rem',
-              fontWeight: 800,
-              color: '#1DB954',
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase'
-            }}>
-              {isProfileMode ? 'Player Profile' : (isMultiplayerMode ? 'Multiplayer Duel' : 'Solo Game')}
-            </div>
           </div>
 
           {/* ==================== 2. MAIN BODY CONTENT ==================== */}
@@ -221,7 +216,7 @@ export function ShareInstagramModal({
                     style={{ width: '38px', height: '38px', borderRadius: '6px', objectFit: 'cover' }}
                   />
                   <div style={{ overflow: 'hidden' }}>
-                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#1DB954', textTransform: 'uppercase' }}>Lagu Favorit</div>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#1DB954', textTransform: 'uppercase' }}>{tx('Favorite Song', 'Lagu Favorit')}</div>
                     <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {user.favoriteSongTitle}
                     </div>
@@ -241,7 +236,7 @@ export function ShareInstagramModal({
               {/* Category Pill */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {category} • {totalSongs} LAGU
+                  {tCategory(category)} • {totalSongs} {tx('SONGS', 'LAGU')}
                 </span>
               </div>
 
@@ -268,14 +263,14 @@ export function ShareInstagramModal({
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '0.75rem', color: '#d1d1d6', borderTop: '1px solid #22222c', paddingTop: '8px', marginTop: '4px' }}>
                   <span>⏱️ <b>{thinkingTime}s</b> thinking</span>
-                  <span>🎯 <b>{totalSongs}/{totalSongs}</b> tertebak</span>
+                  <span>🎯 <b>{totalSongs}/{totalSongs}</b> {tx('guessed', 'tertebak')}</span>
                 </div>
               </div>
 
               {/* Tracklist Preview of Guessed Songs */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Lagu yang Ditebak
+                  {tx('Guessed Songs', 'Lagu yang Ditebak')}
                 </span>
 
                 {tracks && tracks.length > 0 ? (
@@ -309,7 +304,7 @@ export function ShareInstagramModal({
                   ))
                 ) : (
                   <div style={{ backgroundColor: '#14141a', border: '1px solid #22222c', borderRadius: '8px', padding: '10px', fontSize: '0.75rem', color: '#8e8e93', textAlign: 'center' }}>
-                    Semua lagu tertebak sempurna ⚡
+                    {tx('All songs guessed perfectly ⚡', 'Semua lagu tertebak sempurna ⚡')}
                   </div>
                 )}
               </div>
@@ -348,10 +343,10 @@ export function ShareInstagramModal({
                   fontWeight: 900,
                   fontSize: '0.85rem'
                 }}>
-                  {isWinner || rank === 1 ? '🥇 1ST PLACE WINNER' : `RANK #${rank} DARI ${leaderboard.length || 2} PEMAIN`}
+                  {isWinner || rank === 1 ? '🥇 1ST PLACE WINNER' : tx(`RANK #${rank} OF ${leaderboard.length || 2} PLAYERS`, `RANK #${rank} DARI ${leaderboard.length || 2} PEMAIN`)}
                 </div>
                 <div style={{ fontSize: '0.7rem', color: '#8e8e93', marginTop: '4px' }}>
-                  {category} • {totalSongs} Lagu
+                  {tCategory(category)} • {totalSongs} {tx('Songs', 'Lagu')}
                 </div>
               </div>
 
@@ -364,7 +359,7 @@ export function ShareInstagramModal({
                 textAlign: 'center'
               }}>
                 <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#8e8e93', textTransform: 'uppercase' }}>
-                  Poin Kamu
+                  {tx('Your Points', 'Poin Kamu')}
                 </span>
                 <div style={{
                   fontFamily: 'var(--font-mono)',
@@ -381,7 +376,7 @@ export function ShareInstagramModal({
               {/* Room Leaderboard Table */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Peringkat Duel
+                  {tx('Duel Rankings', 'Peringkat Duel')}
                 </span>
 
                 {leaderboard.slice(0, 3).map((p, idx) => {
@@ -426,13 +421,18 @@ export function ShareInstagramModal({
             padding: '10px 14px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between'
+            justifyContent: isProfileMode ? 'center' : 'space-between',
+            gap: '8px'
           }}>
-            <div style={{ fontSize: '0.68rem', color: '#8e8e93', fontWeight: 700, textTransform: 'uppercase' }}>
-              {isProfileMode ? 'Tantang gue di Spotinize' : (isMultiplayerMode ? 'Mabar tebak lagu' : 'Bisa tebak lebih cepat?')}
-            </div>
-            <div style={{ fontSize: '0.88rem', fontWeight: 900, color: '#1DB954' }}>
-              bit.ly/spotinize
+            {!isProfileMode && (
+              <div style={{ fontSize: '0.68rem', color: '#8e8e93', fontWeight: 700, textTransform: 'uppercase' }}>
+                {isMultiplayerMode
+                  ? tx('Play song guessing together', 'Mabar tebak lagu')
+                  : tx('Can you guess faster?', 'Bisa tebak lebih cepat?')}
+              </div>
+            )}
+            <div style={{ fontSize: '0.78rem', fontWeight: 900, color: '#1DB954', whiteSpace: 'nowrap' }}>
+              {siteDomain}
             </div>
           </div>
         </div>
@@ -447,7 +447,7 @@ export function ShareInstagramModal({
             icon={<Download size={16} />}
             style={{ fontWeight: 800, height: '42px' }}
           >
-            {downloading ? 'Membuat Story...' : 'Download PNG Story'}
+            {downloading ? tx('Creating Story...', 'Membuat Story...') : tx('Download PNG Story', 'Download PNG Story')}
           </Button>
 
           <Button
@@ -456,7 +456,7 @@ export function ShareInstagramModal({
             icon={copied ? <Check size={16} color="var(--color-primary)" /> : <Copy size={16} />}
             style={{ height: '42px', whiteSpace: 'nowrap' }}
           >
-            {copied ? 'Tersalin' : 'Copy Link'}
+            {copied ? tx('Copied', 'Tersalin') : 'Copy Link'}
           </Button>
         </div>
       </div>

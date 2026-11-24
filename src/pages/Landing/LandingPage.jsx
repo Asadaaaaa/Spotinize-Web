@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
-import { Play, Sparkles, Zap, Users, Music2, ArrowRight, Lock, User as UserIcon, LogIn, UserPlus, AlertCircle, Share2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import Lenis from 'lenis';
+import {
+  Play, Sparkles, Zap, Users, ArrowRight, Lock, User as UserIcon,
+  LogIn, UserPlus, AlertCircle, Disc3, Flame, Headphones, Bookmark,
+  CheckCircle2, Trophy, EyeOff, ChevronDown
+} from 'lucide-react';
 import Button from '../../components/Button.jsx';
-import Card from '../../components/Card.jsx';
 import Logo from '../../components/Logo.jsx';
 import LandingDemoSection from '../../components/LandingDemoSection.jsx';
+import ApiClient from '../../services/api.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
+import { useLanguage } from '../../hooks/useLanguage.jsx';
+import '../../styles/landing.css';
 
 function InstagramIcon({ size = 16, color = '#E1306C' }) {
   return (
@@ -16,20 +23,175 @@ function InstagramIcon({ size = 16, color = '#E1306C' }) {
   );
 }
 
+const REVEAL_BARS = [
+  { label: '0.1s', height: 14, pts: '+1000' },
+  { label: '0.5s', height: 22, pts: '+900' },
+  { label: '1.0s', height: 30, pts: '+750' },
+  { label: '2.0s', height: 36, pts: '+600' },
+  { label: '3.0s', height: 42, pts: '+450' },
+  { label: '4.0s', height: 48, pts: '+300' },
+  { label: '5.0s', height: 54, pts: '+150' }
+];
+
 export function LandingPage({ onStart, authModal: externalAuthModal = null, setAuthModal: setExternalAuthModal = null }) {
   const { register, login, isAuthenticated } = useAuth();
-  
+  const { tx } = useLanguage();
+
   // Modal states: null | 'LOGIN' | 'REGISTER'
   const [internalAuthModal, setInternalAuthModal] = useState(null);
   const authModal = externalAuthModal !== null ? externalAuthModal : internalAuthModal;
   const setAuthModal = setExternalAuthModal || setInternalAuthModal;
-  
+
   // Form states
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Trending covers for Pinterest-style masonry collage
+  const [trendingCovers, setTrendingCovers] = useState([]);
+
+  // Live animated Bento states
+  const [activeRevealStep, setActiveRevealStep] = useState(0);
+  const [aiTickerIdx, setAiTickerIdx] = useState(0);
+
+  const lenisRef = useRef(null);
+  const masonryRef = useRef(null);
+  const hScrollOuterRef = useRef(null);
+  const hScrollTrackRef = useRef(null);
+  const hScrollProgressRef = useRef(null);
+
+  const aiTickerItems = [
+    {
+      tag: tx('Hardest Song', 'Lagu Tersulit'),
+      text: tx('Only 14% guessed this track under 1.0s this week. Think you can beat it?', 'Cuma 14% pemain yang bisa nebak lagu ini di bawah 1 detik minggu ini!')
+    },
+    {
+      tag: tx('New Release', 'Rilis Baru'),
+      text: tx('Fresh Friday drop added to Global & Indonesia Trends — ready to play now.', 'Rilisan baru Jumat ini sudah masuk Global & Indonesia Trends, siap dimainkan.')
+    },
+    {
+      tag: tx('Music Fun Fact', 'Fun Fact Musik'),
+      text: tx('This iconic intro was recorded in a single take — tap to hear & bookmark!', 'Intro ikonik lagu ini direkam cuma dalam 1 take — klik buat dengerin & simpan!')
+    }
+  ];
+
+  // Cycle live animations inside Bento section
+  useEffect(() => {
+    const revealTimer = setInterval(() => {
+      setActiveRevealStep((prev) => (prev + 1) % REVEAL_BARS.length);
+    }, 1150);
+
+    const tickerTimer = setInterval(() => {
+      setAiTickerIdx((prev) => (prev + 1) % 3);
+    }, 3400);
+
+    return () => {
+      clearInterval(revealTimer);
+      clearInterval(tickerTimer);
+    };
+  }, []);
+
+  // Initialize Lenis Smooth Scrolling + Scroll-linked Masonry Parallax
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.15,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      smoothWheel: true,
+      touchMultiplier: 1.4
+    });
+    lenisRef.current = lenis;
+
+    const handleScroll = ({ scroll }) => {
+      if (masonryRef.current) {
+        const clamped = Math.max(-44, Math.min(44, (scroll - 160) * 0.08));
+        masonryRef.current.style.setProperty('--lp-parallax', `${clamped.toFixed(1)}px`);
+      }
+
+      if (hScrollOuterRef.current && hScrollTrackRef.current && window.innerWidth > 780) {
+        const rect = hScrollOuterRef.current.getBoundingClientRect();
+        const scrollableDist = Math.max(1, rect.height - window.innerHeight);
+        const progress = Math.max(0, Math.min(1, -rect.top / scrollableDist));
+        const maxShift = Math.max(0, hScrollTrackRef.current.scrollWidth - window.innerWidth + 32);
+        const shiftX = -(progress * maxShift);
+        hScrollTrackRef.current.style.transform = `translate3d(${shiftX.toFixed(1)}px, 0, 0)`;
+        if (hScrollProgressRef.current) {
+          hScrollProgressRef.current.style.setProperty('--h-progress', progress.toFixed(3));
+        }
+      }
+    };
+
+    lenis.on('scroll', handleScroll);
+
+    let rafId;
+    const raf = (time) => {
+      lenis.raf(time);
+      rafId = requestAnimationFrame(raf);
+    };
+    rafId = requestAnimationFrame(raf);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      lenis.off('scroll', handleScroll);
+      lenis.destroy();
+      lenisRef.current = null;
+    };
+  }, []);
+
+  // Pause Lenis background scroll when Auth Modal is open
+  useEffect(() => {
+    const lenis = lenisRef.current;
+    if (!lenis) return;
+    if (authModal) {
+      lenis.stop();
+    } else {
+      lenis.start();
+    }
+  }, [authModal]);
+
+  // IntersectionObserver for smooth scroll-reveal sections
+  useEffect(() => {
+    const elements = document.querySelectorAll('.lp-reveal');
+    if (!elements.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    elements.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+
+  // Fetch cached trending tracks for authentic album art pins
+  useEffect(() => {
+    let cancelled = false;
+    ApiClient.get('/search/trending')
+      .then((res) => {
+        if (cancelled) return;
+        const combined = [...(res.globalTrends || []), ...(res.indonesiaTrends || [])]
+          .filter((t) => t?.albumArt);
+        setTrendingCovers(combined);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleBentoMouseMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    e.currentTarget.style.setProperty('--mx', `${x}px`);
+    e.currentTarget.style.setProperty('--my', `${y}px`);
+  };
 
   const openRegister = () => {
     setErrorMsg('');
@@ -50,15 +212,15 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
     e.preventDefault();
     setErrorMsg('');
     if (!username.trim()) {
-      setErrorMsg('Username wajib diisi');
+      setErrorMsg(tx('Username is required', 'Username wajib diisi'));
       return;
     }
     if (username.trim().length < 3) {
-      setErrorMsg('Username minimal 3 karakter');
+      setErrorMsg(tx('Username must be at least 3 characters', 'Username minimal 3 karakter'));
       return;
     }
     if (!password || password.length < 4) {
-      setErrorMsg('Password minimal 4 karakter');
+      setErrorMsg(tx('Password must be at least 4 characters', 'Password minimal 4 karakter'));
       return;
     }
 
@@ -68,7 +230,7 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
       setAuthModal(null);
       onStart();
     } catch (err) {
-      setErrorMsg(err.response?.data?.error || err.message || 'Gagal mendaftarkan akun');
+      setErrorMsg(err.response?.data?.error || err.message || tx('Failed to create account', 'Gagal mendaftarkan akun'));
     } finally {
       setSubmitting(false);
     }
@@ -78,7 +240,7 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
     e.preventDefault();
     setErrorMsg('');
     if (!username.trim() || !password) {
-      setErrorMsg('Username dan password wajib diisi');
+      setErrorMsg(tx('Username and password are required', 'Username dan password wajib diisi'));
       return;
     }
 
@@ -88,200 +250,546 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
       setAuthModal(null);
       onStart();
     } catch (err) {
-      setErrorMsg(err.response?.data?.error || err.message || 'Username atau password salah');
+      setErrorMsg(err.response?.data?.error || err.message || tx('Invalid username or password', 'Username atau password salah'));
     } finally {
       setSubmitting(false);
     }
   };
 
+  const coverAt = (idx) => trendingCovers[idx] || null;
+  const pin0 = coverAt(0);
+  const pin1 = coverAt(1);
+  const pin2 = coverAt(5) || coverAt(2);
+  const pin3 = coverAt(6) || coverAt(3);
+  const currentBar = REVEAL_BARS[activeRevealStep];
+  const currentTicker = aiTickerItems[aiTickerIdx];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, width: '100%', minHeight: '100%', paddingBottom: 0, margin: 0 }}>
-      {/* Main Sections Wrapper */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '56px', flex: 1, paddingBottom: '48px' }}>
-        {/* Hero Section */}
-        <section style={{
-          textAlign: 'center',
-          paddingTop: '60px',
-          paddingBottom: '40px',
-          position: 'relative'
-        }}>
-        {/* Background glow */}
-        <div style={{
-          position: 'absolute',
-          top: '0',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: '340px',
-          height: '340px',
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(29, 185, 84, 0.22) 0%, rgba(0,0,0,0) 70%)',
-          pointerEvents: 'none',
-          zIndex: 0
-        }} />
+    <div className="lp-root">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '64px', flex: 1, paddingBottom: '68px' }}>
+        {/* HERO SECTION */}
+        <section className="lp-hero">
+          <div className="lp-hero-glow" />
+          <div className="container-narrow" style={{ position: 'relative', zIndex: 1 }}>
+            <h1 style={{ margin: '0 0 14px 0', lineHeight: 1.06 }}>
+              <Logo size="hero" />
+            </h1>
 
-        <div className="container-narrow" style={{ position: 'relative', zIndex: 1 }}>
-          <h1 style={{
-            margin: '0 0 16px 0',
-            lineHeight: 1.08
-          }}>
-            <Logo size="hero" />
-          </h1>
+            <p className="lp-hero-slogan">
+              "How fast you recognize this song?"
+            </p>
 
-          <p style={{
-            fontSize: 'clamp(1.1rem, 3.5vw, 1.4rem)',
-            fontWeight: 600,
-            color: 'var(--color-text)',
-            marginBottom: '32px',
-            letterSpacing: '-0.01em'
-          }}>
-            "How fast you recognize this song?"
-          </p>
+            <p className="lp-hero-subtitle">
+              {tx(
+                'Guess songs from 0.1s, drop Blind Song challenges on the Music Feed, follow music lovers, and keep your daily streak alive.',
+                'Tebak lagu mulai dari 0.1 detik, bagikan Blind Song Drop & tantangan skor di Music Feed, follow sesama pecinta musik, dan jaga streak harianmu.'
+              )}
+            </p>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
-            {isAuthenticated ? (
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={onStart}
-                icon={<Play size={20} fill="#000" />}
-                style={{ padding: '16px 36px', fontSize: '1.15rem', fontWeight: 800 }}
-              >
-                Mulai Main
-              </Button>
-            ) : (
-              <>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              {isAuthenticated ? (
                 <Button
                   variant="primary"
                   size="lg"
-                  onClick={openRegister}
-                  icon={<UserPlus size={20} />}
-                  style={{ padding: '16px 36px', fontSize: '1.15rem', fontWeight: 800 }}
+                  onClick={onStart}
+                  icon={<Play size={20} fill="#000" />}
+                  style={{ padding: '16px 36px', fontSize: '1.12rem', fontWeight: 800 }}
                 >
-                  Daftar Akun Baru
+                  {tx('Start Playing', 'Mulai Main')}
                 </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    onClick={openRegister}
+                    icon={<UserPlus size={20} />}
+                    style={{ padding: '16px 34px', fontSize: '1.1rem', fontWeight: 800 }}
+                  >
+                    {tx('Create Account', 'Daftar Akun Baru')}
+                  </Button>
 
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  onClick={openLogin}
-                  icon={<LogIn size={20} color="var(--color-primary)" />}
-                  style={{ padding: '16px 30px', fontSize: '1.15rem', fontWeight: 700 }}
-                >
-                  Masuk / Login
-                </Button>
-              </>
-            )}
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    onClick={openLogin}
+                    icon={<LogIn size={20} color="var(--color-primary)" />}
+                    style={{ padding: '16px 28px', fontSize: '1.1rem', fontWeight: 700 }}
+                  >
+                    {tx('Log In', 'Masuk / Login')}
+                  </Button>
+                </>
+              )}
+            </div>
+
+            <div className="lp-scroll-cue">
+              <span>{tx('Scroll to explore', 'Scroll untuk jelajahi')}</span>
+              <ChevronDown size={14} />
+            </div>
           </div>
+        </section>
+
+        {/* PINTEREST-STYLE MASONRY COLLAGE */}
+        <section ref={masonryRef} className="lp-masonry-stage" aria-label="Spotinize Visual Showcase">
+          <div className="lp-masonry-grid">
+            {/* Column 1 */}
+            <div className="lp-masonry-col" style={{ '--col-speed': '-0.65' }}>
+              <div className="lp-pin-card">
+                <div className="lp-pin-cover-wrap lp-pin-cover-wrap--tall">
+                  {pin0?.albumArt ? (
+                    <img src={pin0.albumArt} alt={pin0.title} className="lp-pin-cover-img" />
+                  ) : (
+                    <div className="lp-pin-cover-fallback">
+                      <Disc3 size={42} />
+                    </div>
+                  )}
+                  <span className="lp-pin-float-pill">
+                    <Zap size={11} color="var(--color-primary)" /> 0.1s Guess
+                  </span>
+                  <div className="lp-pin-play-fab">
+                    <Play size={14} fill="#000" />
+                  </div>
+                </div>
+                <div className="lp-pin-meta-row">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="lp-pin-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {pin0?.title || 'Global Trends #1'}
+                    </div>
+                    <div className="lp-pin-sub" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {pin0?.artist || 'Progressive Reveal'}
+                    </div>
+                  </div>
+                  <span className="lp-pin-chip lp-pin-chip--green">+1000</span>
+                </div>
+              </div>
+
+              <div className="lp-pin-card">
+                <div className="lp-pin-meta-row">
+                  <span className="lp-pin-chip" style={{ color: 'var(--color-warning)', borderColor: 'rgba(255, 164, 43, 0.35)', backgroundColor: 'rgba(255, 164, 43, 0.12)' }}>
+                    <Flame size={11} /> 14 Day Streak
+                  </span>
+                  <span className="lp-pin-chip lp-pin-chip--green">94% Match</span>
+                </div>
+                <div className="lp-pin-title">
+                  {tx('Taste Compatibility', 'Kecocokan Selera')}
+                </div>
+                <div className="lp-taste-bar-track">
+                  <div className="lp-taste-bar-fill" />
+                </div>
+                <div className="lp-pin-sub">
+                  {tx('Compare pinned tracks & fastest guesses on any profile.', 'Bandingkan Top 5 lagu & rekor tebakan di setiap profil.')}
+                </div>
+              </div>
+            </div>
+
+            {/* Column 2 */}
+            <div className="lp-masonry-col lp-masonry-col--offset" style={{ '--col-speed': '0.55' }}>
+              <div className="lp-pin-card">
+                <div className="lp-pin-cover-wrap">
+                  {pin1?.albumArt ? (
+                    <img src={pin1.albumArt} alt="Blind Song Drop" className="lp-pin-cover-img lp-pin-cover-img--blurred" />
+                  ) : (
+                    <div className="lp-pin-cover-fallback">
+                      <EyeOff size={36} />
+                    </div>
+                  )}
+                  <span className="lp-pin-float-pill">
+                    <EyeOff size={11} color="#3d91f4" /> Blind Drop
+                  </span>
+                  <div className="lp-pin-blind-overlay">
+                    <Disc3 size={28} color="#fff" className="lp-spin-slow" />
+                    <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#fff' }}>
+                      {tx('0.5s Clue Ready', 'Clue 0.5s Siap')}
+                    </span>
+                  </div>
+                </div>
+                <div className="lp-pin-title">
+                  {tx('"Bet you know this chorus!"', '"Yakin lo tau reff lagu ini!"')}
+                </div>
+                <div className="lp-pin-meta-row">
+                  <span className="lp-pin-sub">🔥 18 · 🎧 9</span>
+                  <span className="lp-pin-chip">Bookmark <Bookmark size={10} /></span>
+                </div>
+              </div>
+
+              <div className="lp-pin-card">
+                <div className="lp-pin-meta-row">
+                  <span className="lp-pin-chip">Song of the Day</span>
+                  <Bookmark size={14} color="var(--color-primary)" />
+                </div>
+                <div className="lp-pin-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {pin2?.title || 'On Repeat Today'}
+                </div>
+                <div className="lp-pin-sub">
+                  {pin2?.artist || 'Indies & Pop'} · {tx('Preview & save to Saved Songs', 'Putar & simpan ke Saved Songs')}
+                </div>
+              </div>
+            </div>
+
+            {/* Column 3 */}
+            <div className="lp-masonry-col" style={{ '--col-speed': '-0.45' }}>
+              <div className="lp-pin-card">
+                <div className="lp-pin-meta-row">
+                  <span className="lp-pin-chip lp-pin-chip--green">
+                    <Trophy size={11} /> Beat My Score
+                  </span>
+                  <span className="lp-pin-sub">5 Songs</span>
+                </div>
+                <div className="lp-pin-title">
+                  {tx('Indonesia Trends Challenge', 'Tantangan Indonesia Trends')}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <div className="lp-mini-lb-row">
+                    <span>#1 @asada</span>
+                    <strong style={{ color: 'var(--color-primary)', fontFamily: 'var(--font-mono)' }}>4,620</strong>
+                  </div>
+                  <div className="lp-mini-lb-row">
+                    <span>#2 @raka</span>
+                    <strong style={{ fontFamily: 'var(--font-mono)' }}>4,180</strong>
+                  </div>
+                </div>
+                <div className="lp-pin-sub">
+                  {tx('Play the exact same 5-song round order.', 'Mainkan urutan 5 lagu yang persis sama.')}
+                </div>
+              </div>
+
+              <div className="lp-pin-card">
+                <div className="lp-pin-meta-row">
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 800, fontSize: '0.8rem', color: 'var(--color-text-bright)' }}>
+                    @spotinize <CheckCircle2 size={13} color="var(--color-primary)" />
+                  </span>
+                  <span className="lp-pin-chip" style={{ color: '#c084fc', borderColor: 'rgba(168, 85, 247, 0.35)', backgroundColor: 'rgba(168, 85, 247, 0.12)' }}>
+                    <Sparkles size={10} /> AI Pulse
+                  </span>
+                </div>
+                <div className="lp-pin-title">
+                  {tx('Hardest Song This Week', 'Lagu Tersulit Minggu Ini')}
+                </div>
+                <div className="lp-pin-sub">
+                  {tx('Only 18% of players guessed this under 2s. Can you?', 'Cuma 18% pemain yang bisa nebak di bawah 2 detik!')}
+                </div>
+              </div>
+            </div>
+
+            {/* Column 4 */}
+            <div className="lp-masonry-col lp-masonry-col--offset" style={{ '--col-speed': '0.6' }}>
+              <div className="lp-pin-card">
+                <div className="lp-pin-meta-row">
+                  <span className="lp-pin-chip lp-pin-chip--green">Live Room</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+                    SPOT42
+                  </span>
+                </div>
+                <div className="lp-pin-title">
+                  {tx('Duel Mutual Friends', 'Duel Teman Mutual')}
+                </div>
+                <div className="lp-pin-sub">
+                  {tx('Real-time Socket.IO room with live round leaderboard.', 'Room Socket.IO real-time dengan papan skor langsung.')}
+                </div>
+              </div>
+
+              <div className="lp-pin-card">
+                <div className="lp-pin-cover-wrap">
+                  {pin3?.albumArt ? (
+                    <img src={pin3.albumArt} alt={pin3.title} className="lp-pin-cover-img" />
+                  ) : (
+                    <div className="lp-pin-cover-fallback">
+                      <Headphones size={36} />
+                    </div>
+                  )}
+                  <span className="lp-pin-float-pill">
+                    <Headphones size={11} color="var(--color-primary)" /> Spotify Opt-In
+                  </span>
+                </div>
+                <div className="lp-pin-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {pin3?.title || 'Now Playing Live'}
+                </div>
+                <div className="lp-pin-sub">
+                  {tx('Optional connect to share Now Playing & playlists.', 'Hubungkan opsional untuk tampilkan Now Playing.')}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* HORIZONTAL SCROLL-DRIVEN FEATURE SHOWCASE */}
+        <section ref={hScrollOuterRef} className="lp-hscroll-outer">
+          <div className="lp-hscroll-sticky">
+            <div className="lp-hscroll-head">
+              <div>
+                <h2 className="lp-section-title" style={{ textAlign: 'left', marginBottom: '6px' }}>
+                  {tx('Built for music heads & fast ears.', 'Dibuat untuk telinga cepat & pecinta musik.')}
+                </h2>
+                <p className="lp-section-desc" style={{ textAlign: 'left', margin: 0, maxWidth: '520px' }}>
+                  {tx(
+                    'A fast-paced music guessing arena at the core, wrapped in a lightweight social feed.',
+                    'Arena tebak lagu cepat sebagai inti permainan, dipadukan dengan feed sosial musik yang ringan.'
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="lp-hscroll-viewport">
+              <div ref={hScrollTrackRef} className="lp-hscroll-track">
+                {/* Feature Card 1: Live Cycling Progressive Reveal */}
+                <div
+                  className="lp-hscroll-card lp-hscroll-card--wide"
+                  onMouseMove={handleBentoMouseMove}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div className="lp-bento-icon" style={{ backgroundColor: 'var(--color-primary-subtle)', color: 'var(--color-primary)', marginBottom: 0 }}>
+                        <Zap size={21} />
+                      </div>
+                      <span className="lp-pin-chip lp-pin-chip--green" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem' }}>
+                        {currentBar.label} · {currentBar.pts} PTS
+                      </span>
+                    </div>
+                    <h3 style={{ fontSize: '1.18rem', fontWeight: 900, marginBottom: '6px' }}>
+                      Progressive Reveal (0.1s → 5.0s)
+                    </h3>
+                    <p style={{ fontSize: '0.86rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
+                      {tx(
+                        'Start from a 0.1s audio flash across Global & Indonesia Trends, Genre Hits, Release Years, Nostalgia < 2000, or Artist Mode.',
+                        'Mulai dari potongan 0.1 detik lintas Global & Indonesia Trends, Genre Hits, Era & Tahun, Nostalgia < 2000, hingga Artist Mode.'
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="lp-bento-visual">
+                    <div className="lp-reveal-bars">
+                      {REVEAL_BARS.map((bar, idx) => {
+                        const barState = idx === activeRevealStep ? 'active' : idx < activeRevealStep ? 'passed' : '';
+                        return (
+                          <div key={bar.label} className="lp-reveal-bar">
+                            <div
+                              className={`lp-reveal-bar-fill ${barState}`}
+                              style={{ height: `${bar.height}px` }}
+                            />
+                            <span style={{
+                              fontSize: '0.66rem',
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: idx === activeRevealStep ? 800 : 600,
+                              color: idx === activeRevealStep ? 'var(--color-primary)' : 'var(--color-text-dim)'
+                            }}>
+                              {bar.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Feature Card 2: Music Feed & Blind Drop */}
+                <div
+                  className="lp-hscroll-card"
+                  onMouseMove={handleBentoMouseMove}
+                >
+                  <div>
+                    <div className="lp-bento-icon" style={{ backgroundColor: 'rgba(61, 145, 244, 0.15)', color: '#3d91f4' }}>
+                      <Disc3 size={21} className="lp-spin-slow" />
+                    </div>
+                    <h3 style={{ fontSize: '1.18rem', fontWeight: 900, marginBottom: '6px' }}>
+                      Music Feed & Blind Drop
+                    </h3>
+                    <p style={{ fontSize: '0.86rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
+                      {tx(
+                        'Post Song of the Day or hide a track behind a blurred Blind Drop card for followers to guess right inside the timeline.',
+                        'Posting Song of the Day atau sembunyikan lagu di kartu Blind Drop tersensor agar followers menebaknya langsung di feed.'
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="lp-bento-visual" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                    <div className="lp-blind-scan" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '11px', backgroundColor: 'rgba(61, 145, 244, 0.15)', color: '#3d91f4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <EyeOff size={18} />
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--color-text-bright)' }}>
+                          ??? — ???
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-dim)' }}>
+                          {tx('Solved by 12 · Fastest 0.5s', 'Ditebak 12 orang · Tercepat 0.5s')}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="lp-eq-bars" aria-hidden="true">
+                      <span className="lp-eq-bar" />
+                      <span className="lp-eq-bar" />
+                      <span className="lp-eq-bar" />
+                      <span className="lp-eq-bar" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Feature Card 3: Live Multiplayer & Async Challenge */}
+                <div
+                  className="lp-hscroll-card lp-hscroll-card--wide"
+                  onMouseMove={handleBentoMouseMove}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div className="lp-bento-icon" style={{ backgroundColor: 'var(--color-warning-bg)', color: 'var(--color-warning)', marginBottom: 0 }}>
+                        <Users size={21} />
+                      </div>
+                      <span className="lp-pin-chip lp-pin-chip--green">
+                        <span className="lp-live-dot" /> LIVE ROOM · SPOT42
+                      </span>
+                    </div>
+                    <h3 style={{ fontSize: '1.18rem', fontWeight: 900, marginBottom: '6px' }}>
+                      {tx('Live Multiplayer & Beat My Score', 'Multiplayer Live & Beat My Score')}
+                    </h3>
+                    <p style={{ fontSize: '0.86rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
+                      {tx(
+                        'Invite Mutual friends to private live rooms via Socket.IO, or share any match as an Async Challenge with the exact same track sequence.',
+                        'Undang teman Mutual ke room live via Socket.IO, atau bagikan hasil main jadi Async Challenge dengan set lagu yang persis sama.'
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="lp-bento-visual" style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                    <div className="lp-mini-lb-row">
+                      <div className="lp-mini-lb-bg" style={{ width: `${82 + (activeRevealStep % 2) * 10}%` }} />
+                      <span>#1 · @asada <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>(Host)</span></span>
+                      <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-primary)' }}>4,850 pts</strong>
+                    </div>
+                    <div className="lp-mini-lb-row">
+                      <div className="lp-mini-lb-bg" style={{ width: `${66 + ((activeRevealStep + 1) % 2) * 10}%`, backgroundColor: 'rgba(255, 255, 255, 0.05)' }} />
+                      <span>#2 · @budi</span>
+                      <strong style={{ fontFamily: 'var(--font-mono)' }}>4,310 pts</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Feature Card 4: Official @spotinize AI & Daily Streak */}
+                <div
+                  className="lp-hscroll-card"
+                  onMouseMove={handleBentoMouseMove}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div className="lp-bento-icon" style={{ backgroundColor: 'rgba(168, 85, 247, 0.14)', color: '#c084fc', marginBottom: 0 }}>
+                        <Sparkles size={21} />
+                      </div>
+                      <span className="streak-pill lp-streak-pulse">
+                        <Flame size={12} /> 14 Streak
+                      </span>
+                    </div>
+                    <h3 style={{ fontSize: '1.18rem', fontWeight: 900, marginBottom: '6px' }}>
+                      @spotinize AI & Daily Streak
+                    </h3>
+                    <p style={{ fontSize: '0.86rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
+                      {tx(
+                        'Hourly AI music news, fun facts, and community hardest-song drops — plus daily streaks & song bookmarks.',
+                        'Update AI tiap jam berisi berita musik, fun fact, & lagu tersulit komunitas — plus daily streak & bookmark lagu.'
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="lp-bento-visual">
+                    <div key={aiTickerIdx} className="lp-ticker-box">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.76rem', fontWeight: 800, color: 'var(--color-text-bright)' }}>
+                          @spotinize <CheckCircle2 size={12} color="var(--color-primary)" />
+                        </span>
+                        <span className="lp-pin-chip" style={{ color: '#c084fc', borderColor: 'rgba(168, 85, 247, 0.3)', backgroundColor: 'rgba(168, 85, 247, 0.1)' }}>
+                          {currentTicker.tag}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                        {currentTicker.text}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Feature Card 5: Music Identity + Optional Spotify */}
+                <div
+                  className="lp-hscroll-card lp-hscroll-card--wide"
+                  onMouseMove={handleBentoMouseMove}
+                >
+                  <div>
+                    <div className="lp-bento-icon" style={{ backgroundColor: 'var(--color-primary-subtle)', color: 'var(--color-primary)' }}>
+                      <Headphones size={21} />
+                    </div>
+                    <h3 style={{ fontSize: '1.18rem', fontWeight: 900, marginBottom: '6px' }}>
+                      {tx('Music Identity & Optional Spotify', 'Identitas Musik & Spotify Opsional')}
+                    </h3>
+                    <p style={{ fontSize: '0.86rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
+                      {tx(
+                        'Sign up with username only, pin Top 5 songs, compare Taste Compatibility %, and optionally connect Spotify for Now Playing.',
+                        'Daftar cukup pakai username, pin Top 5 lagu favorit, cek Taste Compatibility %, & opsional connect Spotify untuk Now Playing.'
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="lp-bento-visual" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text-bright)' }}>
+                        Taste Compatibility
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 900, color: 'var(--color-primary)' }}>94%</span>
+                    </div>
+                    <div className="lp-taste-bar-track">
+                      <div className="lp-taste-bar-fill" />
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <span className="badge badge-green" style={{ fontSize: '0.66rem' }}>Speed Demon</span>
+                      <span className="badge badge-gray" style={{ fontSize: '0.66rem' }}>Top 5 Pinned</span>
+                      <span className="badge badge-gray" style={{ fontSize: '0.66rem' }}>Spotify Opt-In</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div ref={hScrollProgressRef} className="lp-hscroll-progress-wrap">
+              <div className="lp-hscroll-progress-track">
+                <div className="lp-hscroll-progress-fill" />
+              </div>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-dim)' }}>
+                01 — 05
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* REDESIGNED INTERACTIVE DEMO GAME (BELOW BENTO SECTION) */}
+        <div className="lp-reveal" style={{ '--delay': '60ms' }}>
+          <LandingDemoSection
+            onRegisterClick={isAuthenticated ? onStart : openRegister}
+            ctaLabel={isAuthenticated ? tx('Continue Playing Now', 'Lanjut Main Sekarang') : tx('Sign Up & Play Full Game', 'Daftar & Main Lengkap')}
+          />
         </div>
-      </section>
 
-      {/* Feature Pillars */}
-      {/* Feature Pillars (2x2 Grid on Desktop & Mobile) */}
-      <section className="container">
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: '14px'
-        }}>
-          {/* Card 1: Progressive Reveal */}
-          <Card style={{ padding: 'clamp(14px, 3vw, 22px)', display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--color-primary-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-primary)',
-              marginBottom: '12px'
-            }}>
-              <Zap size={20} />
-            </div>
-            <h3 style={{ fontSize: 'clamp(0.95rem, 2.5vw, 1.15rem)', fontWeight: 800, marginBottom: '6px' }}>
-              Progressive Reveal
-            </h3>
-            <p style={{ fontSize: 'clamp(0.76rem, 2vw, 0.88rem)', color: 'var(--color-text-muted)', lineHeight: 1.45, margin: 0 }}>
-              Dengarkan potongan audio dari <strong>0.1s → 5.0s</strong>. Makin cepat lo tebak, makin besar skor lo!
+        {/* CLOSING CTA BAND */}
+        <section className="container lp-reveal">
+          <div className="lp-cta-band">
+            <h2 style={{ fontSize: 'clamp(1.35rem, 3.2vw, 1.85rem)', fontWeight: 900, margin: 0 }}>
+              {tx('Ready to prove how fast your ears are?', 'Siap buktiin seberapa cepat telingamu?')}
+            </h2>
+            <p style={{ fontSize: '0.92rem', color: 'var(--color-text-muted)', maxWidth: '480px', margin: 0 }}>
+              {tx(
+                'Jump straight into Solo, Multiplayer, or the Music Feed with a quick username signup.',
+                'Langsung masuk ke mode Solo, Multiplayer, dan Music Feed cukup dengan username.'
+              )}
             </p>
-          </Card>
-
-          {/* Card 2: Multiplayer Live */}
-          <Card style={{ padding: 'clamp(14px, 3vw, 22px)', display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--color-warning-bg)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-warning)',
-              marginBottom: '12px'
-            }}>
-              <Users size={20} />
+            <div style={{ marginTop: '6px' }}>
+              {isAuthenticated ? (
+                <Button variant="primary" size="lg" onClick={onStart} icon={<Play size={18} fill="#000" />}>
+                  {tx('Go to Home', 'Buka Home')}
+                </Button>
+              ) : (
+                <Button variant="primary" size="lg" onClick={openRegister} icon={<UserPlus size={18} />}>
+                  {tx('Create Free Account', 'Buat Akun Sekarang')}
+                </Button>
+              )}
             </div>
-            <h3 style={{ fontSize: 'clamp(0.95rem, 2.5vw, 1.15rem)', fontWeight: 800, marginBottom: '6px' }}>
-              Multiplayer Live
-            </h3>
-            <p style={{ fontSize: 'clamp(0.76rem, 2vw, 0.88rem)', color: 'var(--color-text-muted)', lineHeight: 1.45, margin: 0 }}>
-              Ajak circle tongkrongan lo buat duel tebak lagu real-time lewat room code & live leaderboard.
-            </p>
-          </Card>
-
-          {/* Card 3: Katalog Hits Lengkap */}
-          <Card style={{ padding: 'clamp(14px, 3vw, 22px)', display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(61, 145, 244, 0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#3d91f4',
-              marginBottom: '12px'
-            }}>
-              <Music2 size={20} />
-            </div>
-            <h3 style={{ fontSize: 'clamp(0.95rem, 2.5vw, 1.15rem)', fontWeight: 800, marginBottom: '6px' }}>
-              Katalog Hits Lengkap
-            </h3>
-            <p style={{ fontSize: 'clamp(0.76rem, 2vw, 0.88rem)', color: 'var(--color-text-muted)', lineHeight: 1.45, margin: 0 }}>
-              Tebak ribuan hits terpopuler mulai dari chart global, tren Indonesia, era nostalgia, hingga artis favorit lo.
-            </p>
-          </Card>
-
-          {/* Card 4: Social & Flex */}
-          <Card style={{ padding: 'clamp(14px, 3vw, 22px)', display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(225, 48, 108, 0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#E1306C',
-              marginBottom: '12px'
-            }}>
-              <Share2 size={20} />
-            </div>
-            <h3 style={{ fontSize: 'clamp(0.95rem, 2.5vw, 1.15rem)', fontWeight: 800, marginBottom: '6px' }}>
-              Social & Flex
-            </h3>
-            <p style={{ fontSize: 'clamp(0.76rem, 2vw, 0.88rem)', color: 'var(--color-text-muted)', lineHeight: 1.45, margin: 0 }}>
-              Pamerkan kartu skor & pencapaian aesthetic lo langsung ke Instagram Stories & teman.
-            </p>
-          </Card>
-        </div>
-      </section>
-
-      {/* Interactive 1-Song Quick Demo Section */}
-      <LandingDemoSection
-        onRegisterClick={isAuthenticated ? onStart : openRegister}
-        ctaLabel={isAuthenticated ? 'Lanjut Main Sekarang' : 'Daftar & Main Lengkap'}
-      />
+          </div>
+        </section>
       </div>
 
       {/* Credits & Footer */}
@@ -316,10 +824,9 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
               Crafted with ❤️ by
             </span>
 
-            {/* Mikail Asada */}
-            <a 
-              href="https://instagram.com/mikailasada" 
-              target="_blank" 
+            <a
+              href="https://instagram.com/mikailasada"
+              target="_blank"
               rel="noopener noreferrer"
               style={{
                 display: 'inline-flex',
@@ -341,10 +848,9 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
               <span>Mikail Asada</span>
             </a>
 
-            {/* Risyad Rafi */}
-            <a 
-              href="https://instagram.com/rafiharefa" 
-              target="_blank" 
+            <a
+              href="https://instagram.com/rafiharefa"
+              target="_blank"
               rel="noopener noreferrer"
               style={{
                 display: 'inline-flex',
@@ -379,12 +885,12 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '28px 24px' }}>
             <div style={{ textAlign: 'center', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '1.4rem', fontWeight: 900, marginBottom: '6px' }}>
-                {authModal === 'REGISTER' ? 'Daftar Akun Baru' : 'Masuk ke Spotinize'}
+                {authModal === 'REGISTER' ? tx('Create New Account', 'Daftar Akun Baru') : tx('Log In to Spotinize', 'Masuk ke Spotinize')}
               </h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                {authModal === 'REGISTER' 
-                  ? 'Daftar dengan username & password tanpa perlu email.' 
-                  : 'Masukkan username dan password akun kamu.'}
+                {authModal === 'REGISTER'
+                  ? tx('Sign up with just a username & password — no email required.', 'Daftar dengan username & password tanpa perlu email.')
+                  : tx('Enter your account username and password.', 'Masukkan username dan password akun kamu.')}
               </p>
             </div>
 
@@ -429,7 +935,7 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
               {authModal === 'REGISTER' && (
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
-                    NAMA LENGKAP / PANGGILAN (OPSIONAL)
+                    {tx('DISPLAY NAME (OPTIONAL)', 'NAMA LENGKAP / PANGGILAN (OPSIONAL)')}
                   </label>
                   <input
                     type="text"
@@ -451,7 +957,7 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
                   <input
                     type="password"
                     className="input"
-                    placeholder="Minimal 4 karakter..."
+                    placeholder={tx('Minimum 4 characters...', 'Minimal 4 karakter...')}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     style={{ paddingLeft: '38px', fontSize: '0.95rem' }}
@@ -469,31 +975,31 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
                 icon={<ArrowRight size={18} />}
                 style={{ height: '48px', fontSize: '1rem', fontWeight: 800, marginTop: '8px' }}
               >
-                {submitting 
-                  ? 'Memproses...' 
-                  : (authModal === 'REGISTER' ? 'Daftar Sekarang' : 'Masuk Sekarang')}
+                {submitting
+                  ? tx('Processing...', 'Memproses...')
+                  : (authModal === 'REGISTER' ? tx('Sign Up Now', 'Daftar Sekarang') : tx('Log In Now', 'Masuk Sekarang'))}
               </Button>
             </form>
 
             <div style={{ textAlign: 'center', marginTop: '18px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
               {authModal === 'REGISTER' ? (
                 <span>
-                  Sudah punya akun?{' '}
-                  <button 
+                  {tx('Already have an account?', 'Sudah punya akun?')}{' '}
+                  <button
                     onClick={openLogin}
                     style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                   >
-                    Masuk di sini
+                    {tx('Log in here', 'Masuk di sini')}
                   </button>
                 </span>
               ) : (
                 <span>
-                  Belum punya akun?{' '}
-                  <button 
+                  {tx("Don't have an account?", 'Belum punya akun?')}{' '}
+                  <button
                     onClick={openRegister}
                     style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                   >
-                    Daftar di sini
+                    {tx('Sign up here', 'Daftar di sini')}
                   </button>
                 </span>
               )}

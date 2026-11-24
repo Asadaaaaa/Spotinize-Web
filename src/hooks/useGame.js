@@ -2,8 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import ApiClient from '../services/api.js';
 import socketService from '../services/socket.js';
 import audioPlayer from '../services/audioPlayer.js';
+import { useLanguage } from './useLanguage.jsx';
 
 export function useGame(gameId, user) {
+  const { tx } = useLanguage();
   const [gameState, setGameState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -387,7 +389,15 @@ export function useGame(gameId, user) {
       });
 
       setRemainingAttempts(res.remainingAttempts);
-      setFeedbackMessage({ isCorrect: res.isCorrect, text: res.message });
+      const feedbackText = res.isCorrect
+        ? tx('NAILED IT! 🎧', 'TEPAT SEKALI! 🎧')
+        : res.isRoundOver
+          ? tx('Out of attempts!', 'Kesempatan habis!')
+          : tx(
+              `Not quite! ${res.remainingAttempts} guess${res.remainingAttempts === 1 ? '' : 'es'} left.`,
+              `Kurang tepat! ${res.remainingAttempts} tebakan tersisa.`
+            );
+      setFeedbackMessage({ isCorrect: res.isCorrect, text: feedbackText });
 
       if (res.isCorrect) {
         stopTimer();
@@ -464,7 +474,7 @@ export function useGame(gameId, user) {
       }
     } catch (e) {
       if (isMountedRef.current) {
-        setError('Koneksi terputus. Silakan refresh halaman.');
+        setError(tx('Connection lost. Please refresh the page.', 'Koneksi terputus. Silakan refresh halaman.'));
       }
     }
   };

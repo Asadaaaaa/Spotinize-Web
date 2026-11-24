@@ -61,6 +61,28 @@ export class ApiClient {
       body: JSON.stringify(body)
     });
   }
+
+  static put(endpoint, body = {}) {
+    return this.request(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    });
+  }
+
+  static patch(endpoint, body = {}) {
+    return this.request(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    });
+  }
+
+  static delete(endpoint, body = null) {
+    const opts = { method: 'DELETE' };
+    if (body !== null) {
+      opts.body = JSON.stringify(body);
+    }
+    return this.request(endpoint, opts);
+  }
 }
 
 export default ApiClient;

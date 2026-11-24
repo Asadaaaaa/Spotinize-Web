@@ -6,8 +6,10 @@ import FriendInviteModal from '../../components/FriendInviteModal.jsx';
 import Avatar from '../../components/Avatar.jsx';
 import socketService from '../../services/socket.js';
 import ApiClient from '../../services/api.js';
+import { useLanguage } from '../../hooks/useLanguage.jsx';
 
 export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
+  const { tx, tCategory } = useLanguage();
   const [game, setGame] = useState(initialGame);
   const [players, setPlayers] = useState(initialGame?.leaderboard || []);
   const [copied, setCopied] = useState(false);
@@ -129,11 +131,11 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
 
   const handleStartGame = async () => {
     if (!hasEnoughPlayers) {
-      setError('Minimal 2 pemain diperlukan untuk memulai game Multiplayer!');
+      setError(tx('At least 2 players are required to start a Multiplayer game!', 'Minimal 2 pemain diperlukan untuk memulai game Multiplayer!'));
       return;
     }
     if (!allReady) {
-      setError(`Menunggu semua pemain siap (${readyCount}/${totalNonHost} Siap)`);
+      setError(tx(`Waiting for all players to be ready (${readyCount}/${totalNonHost} Ready)`, `Menunggu semua pemain siap (${readyCount}/${totalNonHost} Siap)`));
       return;
     }
 
@@ -168,10 +170,10 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
             <span className="badge badge-green" style={{ marginBottom: '6px' }}>
               <Sparkles size={12} /> Multiplayer Lobby
             </span>
-            <h2 style={{ fontSize: '1.6rem' }}>Ruang Tunggu</h2>
+            <h2 style={{ fontSize: '1.6rem' }}>{tx('Waiting Room', 'Ruang Tunggu')}</h2>
           </div>
           <Button variant="ghost" size="sm" onClick={handleLeave} icon={<LogOut size={16} />}>
-            Keluar
+            {tx('Leave', 'Keluar')}
           </Button>
         </div>
 
@@ -203,7 +205,7 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
           textAlign: 'center'
         }}>
           <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Kode Room Lo
+            {tx('Your Room Code', 'Kode Room Lo')}
           </span>
           <span style={{
             fontFamily: 'var(--font-mono)',
@@ -222,7 +224,7 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
               onClick={copyCode}
               icon={copied ? <Check size={16} color="var(--color-primary)" /> : <Copy size={16} />}
             >
-              {copied ? 'Tersalin!' : 'Salin Kode'}
+              {copied ? tx('Copied!', 'Tersalin!') : tx('Copy Code', 'Salin Kode')}
             </Button>
 
             <Button
@@ -231,7 +233,7 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
               onClick={() => setIsInviteOpen(true)}
               icon={<Users size={16} />}
             >
-              Ajak Teman
+              {tx('Invite Friends', 'Ajak Teman')}
             </Button>
           </div>
         </Card>
@@ -244,17 +246,17 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
           textAlign: 'center'
         }}>
           <Card style={{ padding: '12px' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>Kategori</div>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{game?.category}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>{tx('Category', 'Kategori')}</div>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{tCategory(game?.category)}</div>
           </Card>
           <Card style={{ padding: '12px' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>Jumlah Lagu</div>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{game?.numberOfSongs} Lagu</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>{tx('Song Count', 'Jumlah Lagu')}</div>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{game?.numberOfSongs} {tx('Songs', 'Lagu')}</div>
           </Card>
           <Card style={{ padding: '12px' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>Status Siap</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>{tx('Ready Status', 'Status Siap')}</div>
             <div style={{ fontWeight: 700, fontSize: '0.9rem', color: allReady ? 'var(--color-primary)' : 'var(--color-text-dim)' }}>
-              {totalNonHost === 0 ? 'Min. 2 Pemain' : `${readyCount}/${totalNonHost} Siap`}
+              {totalNonHost === 0 ? tx('Min. 2 Players', 'Min. 2 Pemain') : tx(`${readyCount}/${totalNonHost} Ready`, `${readyCount}/${totalNonHost} Siap`)}
             </div>
           </Card>
         </div>
@@ -262,7 +264,7 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
         {/* Player List */}
         <div>
           <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '12px' }}>
-            Daftar Pemain ({players.length})
+            {tx('Player List', 'Daftar Pemain')} ({players.length})
           </span>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -310,10 +312,10 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
                       <span className="badge badge-green">Host</span>
                     ) : p.isReady ? (
                       <span className="badge badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <Check size={12} /> SIAP
+                        <Check size={12} /> {tx('READY', 'SIAP')}
                       </span>
                     ) : (
-                      <span className="badge badge-gray">BELUM SIAP</span>
+                      <span className="badge badge-gray">{tx('NOT READY', 'BELUM SIAP')}</span>
                     )}
                   </div>
                 </div>
@@ -335,10 +337,10 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
               style={{ height: '54px', fontSize: '1.15rem' }}
             >
               {togglingReady
-                ? 'Menyimpan...'
+                ? tx('Saving...', 'Menyimpan...')
                 : isReady
-                  ? 'Batal Siap (Cancel Ready)'
-                  : 'Saya Siap (Ready)'}
+                  ? tx('Cancel Ready', 'Batal Siap (Cancel Ready)')
+                  : tx("I'm Ready", 'Saya Siap (Ready)')}
             </Button>
           )}
 
@@ -358,12 +360,12 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
               }}
             >
               {starting
-                ? 'Memulai Game...'
+                ? tx('Starting Game...', 'Memulai Game...')
                 : !hasEnoughPlayers
-                  ? 'Menunggu Pemain Lain...'
+                  ? tx('Waiting for Other Players...', 'Menunggu Pemain Lain...')
                   : !allReady
-                    ? `Menunggu Pemain Siap (${readyCount}/${totalNonHost})`
-                    : `Mulai Game (${players.length} Pemain Siap)`}
+                    ? tx(`Waiting for Players Ready (${readyCount}/${totalNonHost})`, `Menunggu Pemain Siap (${readyCount}/${totalNonHost})`)
+                    : tx(`Start Game (${players.length} Players Ready)`, `Mulai Game (${players.length} Pemain Siap)`)}
             </Button>
           )}
         </div>

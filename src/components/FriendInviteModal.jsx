@@ -4,8 +4,10 @@ import ApiClient from '../services/api.js';
 import socketService from '../services/socket.js';
 import Button from './Button.jsx';
 import Avatar from './Avatar.jsx';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function FriendInviteModal({ isOpen, onClose, roomCode, gameId, user, category = 'Global Trends' }) {
+  const { tx } = useLanguage();
   const [friends, setFriends] = useState([]);
   const [copied, setCopied] = useState(false);
   const [invitedMap, setInvitedMap] = useState({});
@@ -13,8 +15,8 @@ export function FriendInviteModal({ isOpen, onClose, roomCode, gameId, user, cat
 
   useEffect(() => {
     if (isOpen && user?.id) {
-      ApiClient.get(`/friends/${user.id}`)
-        .then(res => setFriends(res.friends || []))
+      ApiClient.get('/follows/mutuals')
+        .then(res => setFriends(res.mutuals || res.friends || []))
         .catch(() => {});
     }
   }, [isOpen, user?.id]);
@@ -64,7 +66,7 @@ export function FriendInviteModal({ isOpen, onClose, roomCode, gameId, user, cat
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h3 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Users size={20} color="var(--color-primary)" />
-            Ajak Teman Main
+            {tx('Invite Friends to Play', 'Ajak Teman Main')}
           </h3>
           <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: '6px' }}>
             <X size={20} />
@@ -84,7 +86,7 @@ export function FriendInviteModal({ isOpen, onClose, roomCode, gameId, user, cat
           marginBottom: '20px'
         }}>
           <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Kode Room Multiplayer
+            {tx('Multiplayer Room Code', 'Kode Room Multiplayer')}
           </span>
           <span style={{
             fontFamily: 'var(--font-mono)',
@@ -101,24 +103,24 @@ export function FriendInviteModal({ isOpen, onClose, roomCode, gameId, user, cat
             onClick={copyRoomCode}
             icon={copied ? <Check size={16} color="var(--color-primary)" /> : <Copy size={16} />}
           >
-            {copied ? 'Kode Tersalin!' : 'Salin Kode Room'}
+            {copied ? tx('Code Copied!', 'Kode Tersalin!') : tx('Copy Room Code', 'Salin Kode Room')}
           </Button>
         </div>
 
-        {/* Accepted Friends list */}
+        {/* Mutual Friends list */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-            Daftar Teman
+            {tx('Mutual Friends', 'Teman Mutual')}
           </span>
           <span style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-            Kirim undangan instan
+            {tx('Mutual follows only', 'Khusus saling follow')}
           </span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px', maxHeight: '240px', overflowY: 'auto' }}>
           {friends.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--color-text-dim)' }}>
-              Belum ada teman yang ditambahkan. Tambahkan teman di menu Teman atau bagikan kode di atas!
+              {tx('No mutual friends yet. Follow each other in Friends or share the room code above!', 'Belum ada teman Mutual. Saling follow di menu Friends atau bagikan kode room di atas!')}
             </div>
           ) : (
             friends.map(friend => (
@@ -148,7 +150,7 @@ export function FriendInviteModal({ isOpen, onClose, roomCode, gameId, user, cat
                         backgroundColor: friend.isOnline ? 'var(--color-primary)' : 'var(--color-text-dim)'
                       }} />
                       <span style={{ color: friend.isOnline ? 'var(--color-primary)' : 'var(--color-text-dim)' }}>
-                        {friend.isOnline ? 'Aktif' : 'Offline'}
+                        {friend.isOnline ? tx('Online', 'Aktif') : 'Offline'}
                       </span>
                     </div>
                   </div>
@@ -165,7 +167,7 @@ export function FriendInviteModal({ isOpen, onClose, roomCode, gameId, user, cat
                     <Send size={14} />
                   }
                 >
-                  {sendingMap[friend.id] ? 'Mengirim...' : invitedMap[friend.id] ? 'Terkirim ✓' : 'Undang'}
+                  {sendingMap[friend.id] ? tx('Sending...', 'Mengirim...') : invitedMap[friend.id] ? tx('Sent ✓', 'Terkirim ✓') : tx('Invite', 'Undang')}
                 </Button>
               </div>
             ))

@@ -1,628 +1,707 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Trophy, Flame, Zap, Award, Share2, Clock, History, Calendar, 
-  LogOut, Edit3, Music, ExternalLink, Sparkles, CheckCircle2, User, Globe,
-  ArrowLeft, Play, Copy, Check, Loader2, UserPlus, UserCheck, X
+import {
+  Trophy, Flame, Zap, Award, Share2, History,
+  Edit3, Music, User, ArrowLeft, Play, Square,
+  Loader2, UserPlus, UserCheck, MessageSquare, Bookmark, Disc3, ExternalLink
 } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import ShareInstagramModal from '../../components/ShareInstagramModal.jsx';
 import EditProfileModal from '../../components/EditProfileModal.jsx';
+import FeedPostCard from '../../components/FeedPostCard.jsx';
 import ApiClient from '../../services/api.js';
 import socketService from '../../services/socket.js';
+import feedAudioManager from '../../services/feedAudioManager.js';
+import { useTrackDetail } from '../../hooks/useTrackDetail.jsx';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { useDialog } from '../../hooks/useDialog.jsx';
+import { useLanguage } from '../../hooks/useLanguage.jsx';
 import Avatar from '../../components/Avatar.jsx';
 import VinylArt from '../../components/VinylArt.jsx';
+import { ProfileSkeleton, FeedSkeleton } from '../../components/Skeletons.jsx';
 
-function formatRelativeTime(dateString) {
-  if (!dateString) return '';
-  const now = new Date();
-  const date = new Date(dateString);
-  const diffSec = Math.floor((now - date) / 1000);
+export function ProfilePage({
+  user: authUser,
+  targetUsername,
+  onStartDuel,
+  onOpenPublicProfile,
+  onPlayChallenge,
+  onBack
+}) {
+  const { updateUser } = useAuth();
+  const { showAlert } = useDialog();
+  const { tx, tCategory } = useLanguage();
+  const { openTrackDetail } = useTrackDetail();
 
-  if (diffSec < 60) return 'Baru saja';
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} mnt lalu`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} jam lalu`;
-  if (diffSec < 172800) return 'Kemarin';
-  return `${Math.floor(diffSec / 86400)} hari lalu`;
-}
-
-function SpotifyIcon({ size = 16, color = '#1DB954' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
-      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.48.66.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-    </svg>
-  );
-}
-
-export function ProfilePage({ user: authUser, targetUsername, onStartDuel, onBack }) {
-  const { logout, updateUser } = useAuth();
-  const { showAlert, showConfirm } = useDialog();
   const [profileData, setProfileData] = useState(authUser || null);
   const [histories, setHistories] = useState([]);
+  const [userPosts, setUserPosts] = useState([]);
+  const [pinnedSongs, setPinnedSongs] = useState([]);
+  const [badges, setBadges] = useState([]);
+  const [followCounts, setFollowCounts] = useState({ followersCount: 0, followingCount: 0 });
+  const [tasteCompatibility, setTasteCompatibility] = useState(null);
+  const [spotifyShowcase, setSpotifyShowcase] = useState(null);
+  const [savedTracks, setSavedTracks] = useState([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [activeTab, setActiveTab] = useState('posts'); // 'posts' | 'history' | 'saved' | 'spotify'
+  const [spotifyBusy, setSpotifyBusy] = useState(false);
+
   const [showShareModal, setShowShareModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [copied, setCopied] = useState(false);
-  const [friendStatus, setFriendStatus] = useState({ status: 'NONE', requestId: null });
-  const [friendBusy, setFriendBusy] = useState(false);
+  const [followStatus, setFollowStatus] = useState({ isFollowing: false, isFollowedBy: false, isMutual: false });
+  const [followBusy, setFollowBusy] = useState(false);
+  const [audioState, setAudioState] = useState(() => feedAudioManager.getState());
 
-  // Determine if viewing own profile
+  useEffect(() => {
+    const unsub = feedAudioManager.subscribe(setAudioState);
+    return unsub;
+  }, []);
+
   const isSelf = Boolean(
     !targetUsername ||
     (authUser?.username && targetUsername && authUser.username.toLowerCase() === targetUsername.toLowerCase()) ||
     (authUser?.id && profileData?.id && authUser.id === profileData.id)
   );
 
-  // Load profile data
-  const loadProfileData = () => {
+  const loadUserPosts = useCallback(async (uid) => {
+    if (!uid) return;
+    try {
+      setLoadingPosts(true);
+      const res = await ApiClient.get(`/feed/user/${uid}`);
+      setUserPosts(res.posts || []);
+    } catch (e) {
+    } finally {
+      setLoadingPosts(false);
+    }
+  }, []);
+
+  const loadProfileData = useCallback(() => {
     setLoading(true);
     setError(null);
 
     if (targetUsername) {
-      // Lookup by username
       ApiClient.get(`/profile/by-username/${encodeURIComponent(targetUsername.toLowerCase().trim())}`)
         .then((res) => {
           if (res.user) {
             setProfileData(res.user);
             if (res.histories) setHistories(res.histories);
+            setPinnedSongs(res.pinnedSongs || []);
+            setBadges(res.badges || []);
+            setFollowCounts({
+              followersCount: res.followersCount || 0,
+              followingCount: res.followingCount || 0
+            });
+            setTasteCompatibility(res.tasteCompatibility || null);
+            setSpotifyShowcase(res.spotifyShowcase || null);
+            loadUserPosts(res.user.id);
           } else {
-            setError('Pemain tidak ditemukan');
+            setError(tx('Player not found', 'Pemain tidak ditemukan'));
           }
         })
         .catch(err => {
-          setError(err.message || 'Gagal memuat profil pemain');
+          setError(err.message || tx('Failed to load player profile', 'Gagal memuat profil pemain'));
         })
-        .finally(() => {
-          setLoading(false);
-        });
+        .finally(() => setLoading(false));
     } else if (authUser?.id) {
-      // Lookup by authUser ID
       Promise.all([
         ApiClient.get(`/profile/${authUser.id}`),
-        ApiClient.get(`/profile/${authUser.id}/histories`)
-      ]).then(([pRes, hRes]) => {
-        if (pRes.user) setProfileData(pRes.user);
+        ApiClient.get(`/profile/${authUser.id}/histories`),
+        ApiClient.get('/saved-tracks').catch(() => ({ tracks: [] }))
+      ]).then(([pRes, hRes, sRes]) => {
+        if (pRes.user) {
+          setProfileData(pRes.user);
+          setPinnedSongs(pRes.pinnedSongs || []);
+          setBadges(pRes.badges || []);
+          setFollowCounts({
+            followersCount: pRes.followersCount || 0,
+            followingCount: pRes.followingCount || 0
+          });
+          setTasteCompatibility(null);
+          setSpotifyShowcase(pRes.spotifyShowcase || null);
+          loadUserPosts(pRes.user.id);
+        }
         if (hRes.histories) setHistories(hRes.histories);
+        if (sRes?.tracks) setSavedTracks(sRes.tracks);
       }).catch(err => {
-        setError(err.message || 'Gagal memuat profil');
-      }).finally(() => {
-        setLoading(false);
-      });
+        setError(err.message || tx('Failed to load profile', 'Gagal memuat profil'));
+      }).finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
-  };
+  }, [targetUsername, authUser?.id, loadUserPosts, tx]);
 
   useEffect(() => {
     loadProfileData();
-  }, [targetUsername, authUser?.id]);
+  }, [loadProfileData]);
 
-  const loadFriendStatus = useCallback(async () => {
+  const loadFollowStatus = useCallback(async () => {
     if (!authUser?.id || isSelf || !profileData?.id) return;
     try {
-      const res = await ApiClient.get(`/friends/status/${profileData.id}`);
-      setFriendStatus(res || { status: 'NONE', requestId: null });
+      const res = await ApiClient.get(`/follows/status/${profileData.id}`);
+      setFollowStatus(res || { isFollowing: false, isFollowedBy: false, isMutual: false });
     } catch (e) {}
   }, [authUser?.id, isSelf, profileData?.id]);
 
   useEffect(() => {
-    loadFriendStatus();
-  }, [loadFriendStatus]);
+    loadFollowStatus();
+  }, [loadFollowStatus]);
 
   useEffect(() => {
     if (!authUser?.id || isSelf || !profileData?.id) return;
     const socket = socketService.getSocket();
-    const handleUpdate = () => loadFriendStatus();
-    socket.on('friend:update', handleUpdate);
-    return () => socket.off('friend:update', handleUpdate);
-  }, [authUser?.id, isSelf, profileData?.id, loadFriendStatus]);
+    const handleUpdate = () => loadFollowStatus();
+    socket.on('follow:update', handleUpdate);
+    return () => socket.off('follow:update', handleUpdate);
+  }, [authUser?.id, isSelf, profileData?.id, loadFollowStatus]);
 
-  const handleFriendAction = async (action) => {
-    if (!profileData?.id || friendBusy) return;
-    if (action === 'remove') {
-      const confirmed = await showConfirm(`Hapus ${profileData.displayName} dari daftar teman?`, {
-        title: 'Hapus Teman',
-        variant: 'danger',
-        confirmText: 'Hapus',
-        cancelText: 'Batal'
-      });
-      if (!confirmed) return;
-    }
+  const handleToggleFollow = async () => {
+    if (!profileData?.id || followBusy) return;
     try {
-      setFriendBusy(true);
-      if (action === 'request') {
-        await ApiClient.post('/friends/request', { friendId: profileData.id });
-      } else if (action === 'accept') {
-        await ApiClient.post('/friends/accept', { requestId: friendStatus.requestId, requesterId: profileData.id });
-      } else if (action === 'reject') {
-        await ApiClient.post('/friends/reject', { requestId: friendStatus.requestId, requesterId: profileData.id });
-      } else if (action === 'cancel') {
-        await ApiClient.post('/friends/cancel', { requestId: friendStatus.requestId, friendId: profileData.id });
-      } else if (action === 'remove') {
-        await ApiClient.post('/friends/remove', { friendId: profileData.id });
-      }
-      await loadFriendStatus();
+      setFollowBusy(true);
+      const res = followStatus.isFollowing
+        ? await ApiClient.delete(`/follows/${profileData.id}`)
+        : await ApiClient.post(`/follows/${profileData.id}`);
+      setFollowStatus({
+        isFollowing: Boolean(res.isFollowing),
+        isFollowedBy: Boolean(res.isFollowedBy),
+        isMutual: Boolean(res.isMutual)
+      });
     } catch (err) {
-      await showAlert(err.message || 'Gagal memperbarui status pertemanan', {
-        title: 'Gagal',
+      await showAlert(err.message || tx('Failed to update follow status', 'Gagal memperbarui status follow'), {
+        title: tx('Failed', 'Gagal'),
         variant: 'danger'
       });
     } finally {
-      setFriendBusy(false);
+      setFollowBusy(false);
+    }
+  };
+
+  const handleConnectSpotify = async () => {
+    if (!authUser?.id || spotifyBusy) return;
+    try {
+      setSpotifyBusy(true);
+      const res = await ApiClient.get(`/auth/spotify/connect?userId=${encodeURIComponent(authUser.id)}`);
+      if (res?.url) {
+        window.location.href = res.url;
+      }
+    } catch (e) {
+      showAlert(e.message || 'Gagal membuka Spotify OAuth', 'Spotify');
+    } finally {
+      setSpotifyBusy(false);
+    }
+  };
+
+  const handleDisconnectSpotify = async () => {
+    if (!authUser?.id || spotifyBusy) return;
+    try {
+      setSpotifyBusy(true);
+      await ApiClient.post('/auth/spotify/disconnect', { userId: authUser.id });
+      setProfileData(prev => prev ? { ...prev, spotifyConnected: false } : prev);
+      setSpotifyShowcase(null);
+      if (updateUser) updateUser({ ...profileData, spotifyConnected: false });
+      if (activeTab === 'spotify') setActiveTab('posts');
+    } catch (e) {
+      showAlert(e.message || 'Gagal memutus Spotify', 'Spotify');
+    } finally {
+      setSpotifyBusy(false);
     }
   };
 
   const handleProfileUpdated = (updatedUser) => {
     setProfileData(updatedUser);
     if (updateUser) updateUser(updatedUser);
+    if (updatedUser?.id) loadUserPosts(updatedUser.id);
   };
-
-  const handleCopyProfileLink = () => {
-    const uname = profileData?.username || targetUsername || authUser?.username;
-    if (!uname) return;
-    const link = `${window.location.origin}/user/${encodeURIComponent(uname)}`;
-    navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const spotifyProfileLink = profileData?.spotifyUrl || (profileData?.spotifyId ? `https://open.spotify.com/user/${profileData.spotifyId}` : null);
 
   if (loading) {
-    return (
-      <div className="container-narrow mobile-page-container" style={{ paddingTop: '60px', paddingBottom: '60px', textAlign: 'center' }}>
-        <Loader2 size={36} className="spin" style={{ margin: '0 auto 16px', color: 'var(--color-primary)' }} />
-        <p style={{ color: 'var(--color-text-dim)', fontSize: '0.95rem' }}>
-          Memuat data profil {targetUsername ? `@${targetUsername}` : ''}...
-        </p>
-      </div>
-    );
+    return <ProfileSkeleton />;
   }
 
   if (error || !profileData) {
     return (
-      <div className="container-narrow mobile-page-container" style={{ paddingTop: '60px', paddingBottom: '60px', textAlign: 'center' }}>
-        <User size={48} style={{ margin: '0 auto 16px', opacity: 0.5, color: 'var(--color-text-dim)' }} />
-        <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>Pemain Tidak Ditemukan</h2>
-        <p style={{ color: 'var(--color-text-muted)', marginBottom: '24px' }}>
-          Akun dengan username "@{targetUsername}" belum terdaftar atau telah diubah.
-        </p>
+      <div className="home-column-wrap mobile-page-container" style={{ paddingTop: '56px', textAlign: 'center' }}>
+        <User size={44} style={{ margin: '0 auto 12px', opacity: 0.45, color: 'var(--color-text-dim)' }} />
+        <h2 style={{ fontSize: '1.4rem', marginBottom: '6px' }}>{tx('Player Not Found', 'Pemain Tidak Ditemukan')}</h2>
+        <p style={{ color: 'var(--color-text-muted)', marginBottom: '20px' }}>{error}</p>
         {onBack && (
-          <Button variant="primary" onClick={onBack}>
-            Kembali ke Spotinize
+          <Button variant="primary" onClick={onBack} icon={<ArrowLeft size={16} />}>
+            {tx('Back to Home', 'Kembali ke Home')}
           </Button>
         )}
       </div>
     );
   }
 
+  const favAudioKey = `profile-fav:${profileData.id}`;
+  const isFavPlaying = audioState.currentKey === favAudioKey;
+
   return (
-    <div className="container-narrow mobile-page-container" style={{ paddingTop: '20px', paddingBottom: '64px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        
-        {/* Top Header Navigation Bar (when navigating from other pages) */}
-        {onBack && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <button
-              onClick={onBack}
-              className="btn btn-ghost btn-sm"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)' }}
+    <div className="home-column-wrap mobile-page-container">
+      {/* Optional Back Bar for Public Profile */}
+      {onBack && !isSelf && (
+        <div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onBack} style={{ padding: '6px 10px' }}>
+            <ArrowLeft size={15} /> {tx('Back', 'Kembali')}
+          </button>
+        </div>
+      )}
+
+      {/* 1. UNIFIED 2-COLUMN PROFILE CARD */}
+      <Card className="profile-unified-card">
+        {/* Share Story in Top-Right Corner */}
+        <Button
+          variant="secondary"
+          size="sm"
+          className="profile-share-corner"
+          onClick={() => setShowShareModal(true)}
+          icon={<Share2 size={12} />}
+          style={{ padding: '4px 10px', fontSize: '0.72rem', height: '28px' }}
+        >
+          Share Story
+        </Button>
+
+        <div className="profile-unified-grid">
+          {/* LEFT COLUMN: Larger Photo + Tilted Tag -> Name + @username side-by-side -> Clean Bio -> Action */}
+          <div className="profile-left-col">
+            <div
+              style={{ position: 'relative', cursor: isSelf ? 'pointer' : 'default', marginTop: '6px', marginBottom: '4px' }}
+              onClick={() => isSelf && setShowEditModal(true)}
+              title={isSelf ? tx('Click to edit profile', 'Klik untuk edit profil') : ''}
             >
-              <ArrowLeft size={16} /> Kembali
-            </button>
-
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleCopyProfileLink}
-              icon={copied ? <Check size={15} color="var(--color-primary)" /> : <Copy size={15} />}
-            >
-              {copied ? 'Link Tersalin!' : 'Salin Link'}
-            </Button>
-          </div>
-        )}
-
-        {/* 1. Header Profile Card */}
-        <Card style={{
-          backgroundColor: 'var(--color-bg-alt)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '18px',
-          padding: '32px 20px',
-          textAlign: 'center',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          {/* Subtle Glow Accent */}
-          <div style={{
-            position: 'absolute',
-            top: '-40px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: '280px',
-            height: '140px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(29, 185, 84, 0.22) 0%, rgba(0,0,0,0) 70%)',
-            pointerEvents: 'none'
-          }} />
-
-          {/* Avatar with status */}
-          <div 
-            style={{ position: 'relative', cursor: isSelf ? 'pointer' : 'default' }}
-            onClick={() => isSelf && setShowEditModal(true)}
-            title={isSelf ? 'Klik untuk ganti foto profil' : ''}
-          >
-            <Avatar
-              src={profileData?.avatarUrl}
-              alt={profileData?.displayName}
-              size="lg"
-              seed={profileData?.id || profileData?.displayName}
-              style={{
-                width: '92px',
-                height: '92px',
-                border: '3px solid var(--color-primary)',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
-              }}
-            />
-          </div>
-
-          {/* User Info */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', width: '100%' }}>
-            <h2 style={{ fontSize: '1.7rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0 }}>
-              {profileData?.displayName}
-            </h2>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-              <span>@{profileData?.username}</span>
-              <span>•</span>
-              <span className="badge badge-green" style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
-                {profileData?.favoriteCategory || 'Global Trends'} Enjoyer
-              </span>
+              <Avatar
+                src={profileData.avatarUrl}
+                alt={profileData.displayName}
+                size="lg"
+                seed={profileData.id || profileData.displayName}
+                style={{
+                  width: '108px',
+                  height: '108px',
+                  border: '2px solid var(--color-border)',
+                  boxShadow: '0 6px 16px rgba(0,0,0,0.45)'
+                }}
+              />
             </div>
 
-            {/* Bio */}
-            {profileData?.bio && (
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: '1.15rem', fontWeight: 900, margin: 0 }}>
+                {profileData.displayName}
+              </h2>
+              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-dim)', fontWeight: 600 }}>
+                @{profileData.username}
+              </span>
+              {profileData.currentStreak > 0 && (
+                <span className="streak-pill-mini">
+                  <Flame size={10} /> {profileData.currentStreak}
+                </span>
+              )}
+            </div>
+
+            {profileData.bio && (
               <p style={{
-                fontSize: '0.92rem',
-                color: 'var(--color-text)',
-                lineHeight: 1.45,
-                maxWidth: '440px',
-                margin: '8px 0 0 0',
-                backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid var(--color-border-subtle)',
-                padding: '10px 16px',
-                borderRadius: 'var(--radius-md)',
+                fontSize: '0.78rem',
+                color: 'var(--color-text-muted)',
+                lineHeight: 1.4,
+                margin: 0,
                 fontStyle: 'italic'
               }}>
                 "{profileData.bio}"
               </p>
             )}
-          </div>
 
-          {/* Action Buttons Row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', marginTop: '4px' }}>
-            {/* Edit Profil Button (Always visible when viewing own profile) */}
-            {isSelf && (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setShowEditModal(true)}
-                icon={<Edit3 size={15} />}
-                style={{ fontWeight: 800 }}
-              >
-                Edit Profil
-              </Button>
-            )}
+            {/* Followers / Following + Taste Compatibility */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '0.72rem', color: 'var(--color-text-dim)' }}>
+              <span><strong style={{ color: 'var(--color-text-bright)' }}>{followCounts.followersCount}</strong> {tx('Followers', 'Pengikut')}</span>
+              <span>·</span>
+              <span><strong style={{ color: 'var(--color-text-bright)' }}>{followCounts.followingCount}</strong> {tx('Following', 'Mengikuti')}</span>
+              {!isSelf && tasteCompatibility && (
+                <>
+                  <span>·</span>
+                  <span style={{ color: 'var(--color-primary)', fontWeight: 800 }}>
+                    🎧 {tasteCompatibility.score}% {tx('Taste Match', 'Kecocokan')}
+                  </span>
+                </>
+              )}
+            </div>
 
-            {spotifyProfileLink && (
-              <a
-                href={spotifyProfileLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary btn-sm"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
-              >
-                <SpotifyIcon size={15} />
-                <span>View Profile</span>
-                <ExternalLink size={12} color="var(--color-text-dim)" />
-              </a>
-            )}
-
-            {!isSelf && authUser?.id && (
-              <>
-                {friendStatus.status === 'NONE' && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'nowrap', justifyContent: 'center', marginTop: '4px', width: '100%' }}>
+              {isSelf && (
+                <>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setShowEditModal(true)}
+                    icon={<Edit3 size={12} />}
+                    style={{ fontWeight: 800, padding: '6px 10px', fontSize: '0.73rem', whiteSpace: 'nowrap' }}
+                  >
+                    {tx('Edit Profile', 'Edit Profil')}
+                  </Button>
                   <Button
                     variant="secondary"
                     size="sm"
-                    disabled={friendBusy}
-                    onClick={() => handleFriendAction('request')}
-                    icon={<UserPlus size={15} />}
+                    disabled={spotifyBusy}
+                    onClick={profileData.spotifyConnected ? handleDisconnectSpotify : handleConnectSpotify}
+                    icon={<Disc3 size={12} color={profileData.spotifyConnected ? 'var(--color-primary)' : 'currentColor'} />}
+                    style={{ padding: '6px 10px', fontSize: '0.73rem', whiteSpace: 'nowrap' }}
                   >
-                    Tambah Teman
+                    {profileData.spotifyConnected
+                      ? tx('Spotify ✓', 'Spotify ✓')
+                      : tx('Connect Spotify', 'Connect Spotify')}
                   </Button>
-                )}
+                </>
+              )}
 
-                {friendStatus.status === 'PENDING_SENT' && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={friendBusy}
-                    onClick={() => handleFriendAction('cancel')}
-                    icon={<X size={15} />}
-                  >
-                    Batalkan Permintaan
-                  </Button>
-                )}
-
-                {friendStatus.status === 'PENDING_RECEIVED' && (
-                  <>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={friendBusy}
-                      onClick={() => handleFriendAction('accept')}
-                      icon={<Check size={15} />}
-                    >
-                      Terima Pertemanan
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={friendBusy}
-                      onClick={() => handleFriendAction('reject')}
-                      icon={<X size={15} />}
-                    >
-                      Tolak
-                    </Button>
-                  </>
-                )}
-
-                {friendStatus.status === 'ACCEPTED' && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={friendBusy}
-                    onClick={() => handleFriendAction('remove')}
-                    icon={<UserCheck size={15} color="var(--color-primary)" />}
-                  >
-                    Berteman ✓
-                  </Button>
-                )}
-              </>
-            )}
-
-            {!isSelf && onStartDuel && (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => onStartDuel(profileData)}
-                icon={<Play size={15} fill="#000" />}
-              >
-                Tantang Duel
-              </Button>
-            )}
-
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowShareModal(true)}
-              icon={<Share2 size={15} />}
-            >
-              Share Story
-            </Button>
-          </div>
-        </Card>
-
-        {/* 2. Favorite Song Section */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Music size={16} color="var(--color-primary)" /> Lagu Favorit
-            </span>
-            {isSelf && profileData?.favoriteSongTitle && (
-              <button
-                onClick={() => setShowEditModal(true)}
-                className="btn btn-ghost btn-sm"
-                style={{ fontSize: '0.75rem', padding: '2px 8px', color: 'var(--color-text-dim)' }}
-              >
-                Ganti Lagu
-              </button>
-            )}
-          </div>
-
-          {profileData?.favoriteSongTitle ? (
-            <Card style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '16px 18px',
-              backgroundColor: 'var(--color-surface)',
-              border: '1px solid rgba(29, 185, 84, 0.35)',
-              position: 'relative',
-              overflow: 'hidden'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', overflow: 'hidden' }}>
-                <VinylArt
-                  src={profileData.favoriteSongCover}
-                  alt={profileData.favoriteSongTitle}
-                  size={60}
-                  borderRadius="10px"
-                  style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}
-                />
-                <div style={{ overflow: 'hidden' }}>
-                  <div style={{
-                    fontSize: '1.05rem',
-                    fontWeight: 800,
-                    color: 'var(--color-text-bright)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}>
-                    {profileData.favoriteSongTitle}
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 600, marginTop: '2px' }}>
-                    {profileData.favoriteSongArtist}
-                  </div>
-                </div>
-              </div>
-
-              {profileData?.favoriteSongSpotifyId && (
-                <a
-                  href={`https://open.spotify.com/track/${profileData.favoriteSongSpotifyId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-ghost btn-sm"
-                  title="Dengarkan di Spotify"
-                  style={{ padding: '8px', color: 'var(--color-primary)', flexShrink: 0 }}
+              {!isSelf && authUser?.id && (
+                <Button
+                  variant={followStatus.isFollowing ? 'secondary' : 'primary'}
+                  size="sm"
+                  disabled={followBusy}
+                  onClick={handleToggleFollow}
+                  icon={followStatus.isFollowing ? <UserCheck size={13} color="var(--color-primary)" /> : <UserPlus size={13} />}
+                  style={{ padding: '6px 12px', fontSize: '0.78rem' }}
                 >
-                  <SpotifyIcon size={20} />
-                </a>
+                  {followStatus.isFollowing
+                    ? (followStatus.isMutual ? 'Mutual ✓' : tx('Following ✓', 'Mengikuti ✓'))
+                    : (followStatus.isFollowedBy ? tx('Follow Back', 'Follow Back') : tx('Follow', 'Ikuti'))}
+                </Button>
               )}
-            </Card>
-          ) : isSelf ? (
-            <Card 
-              interactive
-              onClick={() => setShowEditModal(true)}
-              style={{
-                textAlign: 'center',
-                padding: '24px 16px',
-                border: '1px dashed var(--color-border)',
-                backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '8px',
-                cursor: 'pointer'
-              }}
-            >
-              <Music size={26} color="var(--color-primary)" />
-              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--color-text-bright)' }}>
-                + Pilih Lagu Favorit Kamu
-              </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-dim)' }}>
-                Tampilkan lagu andalanmu di profil agar pemain lain tahu musik favoritmu
-              </div>
-            </Card>
-          ) : null}
-        </div>
 
-        {/* 3. Statistics Grid */}
-        <div>
-          <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '12px' }}>
-            Statistik Game
-          </span>
+              {!isSelf && onStartDuel && followStatus.isMutual && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => onStartDuel(profileData)}
+                  icon={<Play size={13} fill="#000" />}
+                  style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                >
+                  {tx('Duel', 'Duel')}
+                </Button>
+              )}
+            </div>
+          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-            <Card style={{ padding: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)', marginBottom: '4px' }}>
-                <Trophy size={16} />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Best Score</span>
-              </div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 900 }}>{profileData?.bestScore || 0}</div>
-            </Card>
-
-            <Card style={{ padding: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-warning)', marginBottom: '4px' }}>
-                <Flame size={16} />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Games Played</span>
-              </div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 900 }}>{profileData?.gamesPlayed || 0}</div>
-            </Card>
-
-            <Card style={{ padding: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#3d91f4', marginBottom: '4px' }}>
-                <Zap size={16} />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Average Score</span>
-              </div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 900 }}>{profileData?.averageScore || 0}</div>
-            </Card>
-
-            <Card style={{ padding: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-success)', marginBottom: '4px' }}>
-                <Award size={16} />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Guess Rate</span>
-              </div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 900 }}>{profileData?.guessRate ?? profileData?.winRate ?? 0}%</div>
-              {(profileData?.totalSongsPlayed || 0) > 0 && (
-                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-dim)', marginTop: '2px' }}>
-                  {profileData.totalSongsGuessed || 0}/{profileData.totalSongsPlayed} lagu benar
+          {/* RIGHT COLUMN: Monochrome Statistics Grid -> Favorite Song Below */}
+          <div className="profile-right-col">
+            <div className="profile-stats-mini-grid">
+              <div className="profile-stat-tile">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                  <Trophy size={11} color="var(--color-primary)" /> Best Score
                 </div>
-              )}
-            </Card>
+                <div style={{ fontSize: '1.08rem', fontWeight: 900, marginTop: '1px', fontFamily: 'var(--font-mono)', color: 'var(--color-text-bright)' }}>{profileData.bestScore || 0}</div>
+              </div>
+
+              <div className="profile-stat-tile">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                  <Flame size={11} color="var(--color-text-muted)" /> Games Played
+                </div>
+                <div style={{ fontSize: '1.08rem', fontWeight: 900, marginTop: '1px', fontFamily: 'var(--font-mono)', color: 'var(--color-text-bright)' }}>{profileData.gamesPlayed || 0}</div>
+              </div>
+
+              <div className="profile-stat-tile">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                  <Zap size={11} color="var(--color-text-muted)" /> Avg Score
+                </div>
+                <div style={{ fontSize: '1.08rem', fontWeight: 900, marginTop: '1px', fontFamily: 'var(--font-mono)', color: 'var(--color-text-bright)' }}>{profileData.averageScore || 0}</div>
+              </div>
+
+              <div className="profile-stat-tile">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                  <Award size={11} color="var(--color-text-muted)" /> Guess Rate
+                </div>
+                <div style={{ fontSize: '1.08rem', fontWeight: 900, marginTop: '1px', fontFamily: 'var(--font-mono)', color: 'var(--color-text-bright)' }}>{profileData.guessRate ?? profileData.winRate ?? 0}%</div>
+              </div>
+            </div>
+
+            {/* Pinned Songs (1-5) Below Statistics */}
+            {(pinnedSongs.length > 0 || profileData.favoriteSongTitle) ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {(pinnedSongs.length > 0 ? pinnedSongs : [{
+                  id: 'fav-1',
+                  title: profileData.favoriteSongTitle,
+                  artist: profileData.favoriteSongArtist,
+                  coverUrl: profileData.favoriteSongCover,
+                  previewUrl: profileData.favoriteSongPreviewUrl,
+                  spotifyId: profileData.favoriteSongSpotifyId
+                }]).slice(0, 5).map((song, idx) => {
+                  const songAudioKey = `pinned:${profileData.id}:${song.id || idx}`;
+                  const isSongPlaying = audioState.currentKey === songAudioKey;
+                  return (
+                    <div
+                      key={song.id || idx}
+                      className="feed-track-box clickable-track-card"
+                      style={{ backgroundColor: 'var(--color-bg-alt)', padding: '7px 10px', gap: '9px' }}
+                      onClick={() => openTrackDetail({
+                        title: song.title,
+                        artist: song.artist,
+                        coverUrl: song.coverUrl,
+                        previewUrl: song.previewUrl,
+                        spotifyId: song.spotifyId
+                      })}
+                    >
+                      <VinylArt src={song.coverUrl} alt={song.title} size={34} />
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        {idx === 0 && (
+                          <div style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--color-text-dim)', textTransform: 'uppercase' }}>
+                            {pinnedSongs.length > 1 ? tx('Pinned Songs', 'Lagu Tersemat') : tx('Favorite Song', 'Lagu Favorit')}
+                          </div>
+                        )}
+                        <div style={{ fontWeight: 800, fontSize: '0.8rem', color: 'var(--color-text-bright)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {song.title}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {song.artist}
+                        </div>
+                      </div>
+
+                      {song.previewUrl && (
+                        <button
+                          type="button"
+                          className={`trend-play-btn ${isSongPlaying ? 'active' : ''}`}
+                          style={{ width: '26px', height: '26px' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            feedAudioManager.toggle({
+                              key: songAudioKey,
+                              previewUrl: song.previewUrl
+                            });
+                          }}
+                          title="Preview"
+                        >
+                          {isSongPlaying && audioState.isPlaying ? <Square size={9} fill="currentColor" /> : <Play size={10} fill="currentColor" />}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : isSelf ? (
+              <button
+                type="button"
+                onClick={() => setShowEditModal(true)}
+                style={{
+                  width: '100%',
+                  padding: '9px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px dashed var(--color-border)',
+                  backgroundColor: 'var(--color-bg-alt)',
+                  color: 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  fontSize: '0.76rem',
+                  fontWeight: 700
+                }}
+              >
+                <Music size={14} color="var(--color-primary)" />
+                <span>{tx('+ Pick Favorite Song', '+ Pilih Lagu Favorit')}</span>
+              </button>
+            ) : null}
+
+            {/* Scattered Tilted Favorite Category & Auto-Badges below Favorite Song */}
+            <div className="profile-scattered-badges">
+              <span
+                className="profile-scattered-badge"
+                style={{
+                  backgroundColor: 'rgba(29, 185, 84, 0.14)',
+                  borderColor: 'rgba(29, 185, 84, 0.4)',
+                  color: 'var(--color-primary)'
+                }}
+              >
+                <span>🎵</span>
+                <span>{tCategory(profileData.favoriteCategory || 'Global Trends')}</span>
+              </span>
+              {badges.map(b => (
+                <span key={b.id} className="profile-scattered-badge">
+                  <span>{b.icon}</span>
+                  <span>{b.label}</span>
+                </span>
+              ))}
+            </div>
           </div>
         </div>
+      </Card>
 
-        {/* 4. Game History List */}
-        <div>
-          <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '12px' }}>
-            Riwayat Game Terakhir
-          </span>
+      {/* 2. TABS BELOW: POST & HISTORY */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div className="friend-tabs">
+          <button
+            type="button"
+            className={`btn btn-sm friend-tab-btn ${activeTab === 'posts' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('posts')}
+          >
+            <MessageSquare size={14} />
+            <span>{tx('Posts', 'Post')} ({userPosts.length})</span>
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm friend-tab-btn ${activeTab === 'history' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('history')}
+          >
+            <History size={14} />
+            <span>{tx('History', 'Riwayat')} ({histories.length})</span>
+          </button>
+          {isSelf && (
+            <button
+              type="button"
+              className={`btn btn-sm friend-tab-btn ${activeTab === 'saved' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setActiveTab('saved')}
+            >
+              <Bookmark size={14} />
+              <span>{tx('Saved', 'Tersimpan')} ({savedTracks.length})</span>
+            </button>
+          )}
+          {spotifyShowcase && (
+            <button
+              type="button"
+              className={`btn btn-sm friend-tab-btn ${activeTab === 'spotify' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setActiveTab('spotify')}
+            >
+              <Disc3 size={14} />
+              <span>Spotify</span>
+            </button>
+          )}
+        </div>
 
-          {histories.length === 0 ? (
-            <Card style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-dim)' }}>
-              <History size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
-              <p>Belum ada riwayat game.</p>
-            </Card>
+        {activeTab === 'posts' ? (
+          loadingPosts ? (
+            <FeedSkeleton count={2} />
+          ) : userPosts.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-dim)', borderTop: '1px solid var(--color-border-subtle)' }}>
+              {tx('No posts yet.', 'Belum ada postingan.')}
+            </div>
+          ) : (
+            <div className="feed-stream">
+              {userPosts.map(post => (
+                <FeedPostCard
+                  key={post.id}
+                  post={post}
+                  currentUserId={authUser?.id}
+                  onOpenPublicProfile={onOpenPublicProfile}
+                  onPlayChallenge={onPlayChallenge}
+                  onDeleted={(deletedId) => setUserPosts(prev => prev.filter(p => p.id !== deletedId))}
+                />
+              ))}
+            </div>
+          )
+        ) : activeTab === 'saved' ? (
+          savedTracks.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-dim)', borderTop: '1px solid var(--color-border-subtle)' }}>
+              {tx('No saved songs yet.', 'Belum ada lagu tersimpan.')}
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {histories.map(h => (
+              {savedTracks.map((t, i) => (
                 <div
-                  key={h.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '12px 16px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)'
-                  }}
+                  key={t.id || i}
+                  className="feed-track-box clickable-track-card"
+                  onClick={() => openTrackDetail({
+                    title: t.title,
+                    artist: t.artist,
+                    coverUrl: t.coverUrl,
+                    previewUrl: t.previewUrl,
+                    spotifyId: t.spotifyId
+                  })}
                 >
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>
-                      {h.category} {h.mode === 'MULTIPLAYER' && `(Rank #${h.rank || 1})`}
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                      {h.mode} • {h.correctCount ?? 0}/{h.totalRounds} Benar • {h.totalThinkingTime || 0}s thinking
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '1.1rem', color: 'var(--color-primary)' }}>
-                      {h.score} PTS
-                    </span>
-                    <span className="badge badge-gray" style={{ fontSize: '0.65rem', display: 'block', marginTop: '2px' }}>
-                      {h.status}
-                    </span>
+                  <VinylArt src={t.coverUrl} alt={t.title} size={42} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--color-text-bright)' }}>{t.title}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{t.artist}</div>
                   </div>
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          )
+        ) : activeTab === 'spotify' && spotifyShowcase ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {spotifyShowcase.topTracks?.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="section-mini-label">{tx('On Repeat (Top Tracks)', 'Sering Diputar')}</div>
+                {spotifyShowcase.topTracks.map((t, idx) => (
+                  <div
+                    key={t.spotifyId || idx}
+                    className="feed-track-box clickable-track-card"
+                    onClick={() => openTrackDetail(t)}
+                  >
+                    <VinylArt src={t.coverUrl} alt={t.title} size={40} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.86rem', color: 'var(--color-text-bright)' }}>{t.title}</div>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)' }}>{t.artist}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
-        {/* 5. Account Management / Logout Button (Only on own profile) */}
-        {isSelf && (
-          <div style={{ marginTop: '12px', borderTop: '1px solid var(--color-border)', paddingTop: '20px' }}>
-            <Button
-              variant="danger"
-              size="md"
-              fullWidth
-              onClick={logout}
-              icon={<LogOut size={18} />}
-              style={{ height: '48px', fontWeight: 800 }}
-            >
-              Keluar dari Akun (Log Out)
-            </Button>
+            {spotifyShowcase.publicPlaylists?.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="section-mini-label">{tx('Public Playlists', 'Playlist Publik')}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px' }}>
+                  {spotifyShowcase.publicPlaylists.map(pl => (
+                    <a
+                      key={pl.id}
+                      href={pl.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="card"
+                      style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}
+                    >
+                      <VinylArt src={pl.coverUrl} alt={pl.name} size={38} />
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.82rem', color: 'var(--color-text-bright)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pl.name}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-dim)' }}>{pl.tracksCount} tracks</div>
+                      </div>
+                      <ExternalLink size={12} color="var(--color-text-dim)" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : histories.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-dim)', borderTop: '1px solid var(--color-border-subtle)' }}>
+            {tx('No game history yet.', 'Belum ada riwayat game.')}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {histories.map(h => (
+              <div
+                key={h.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)'
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.94rem' }}>
+                    {tCategory(h.category)} {h.mode === 'MULTIPLAYER' && `(Rank #${h.rank || 1})`}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
+                    {h.mode} • {h.correctCount ?? 0}/{h.totalRounds} {tx('Correct', 'Benar')} • {h.totalThinkingTime || 0}s thinking
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '1.05rem', color: 'var(--color-primary)' }}>
+                    {h.score} PTS
+                  </span>
+                  <span className="badge badge-gray" style={{ fontSize: '0.65rem', display: 'block', marginTop: '2px' }}>
+                    {h.status}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Edit Profile Modal */}
       {isSelf && (
         <EditProfileModal
           isOpen={showEditModal}
@@ -632,7 +711,6 @@ export function ProfilePage({ user: authUser, targetUsername, onStartDuel, onBac
         />
       )}
 
-      {/* Share Instagram Modal */}
       <ShareInstagramModal
         isOpen={showShareModal}
         onClose={() => setShowShareModal(false)}

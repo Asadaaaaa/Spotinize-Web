@@ -1,8 +1,10 @@
 import React from 'react';
 import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, UserX } from 'lucide-react';
 import Avatar from './Avatar.jsx';
+import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function LiveLeaderboard({ leaderboard = [], currentUserId = null, showRanking = true }) {
+  const { tx } = useLanguage();
   const getMedal = (index) => {
     return `#${index + 1}`;
   };
@@ -44,7 +46,7 @@ export function LiveLeaderboard({ leaderboard = [], currentUserId = null, showRa
           Leaderboard
         </span>
         <span style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-          {leaderboard.length} Pemain
+          {leaderboard.length} {tx(leaderboard.length === 1 ? 'Player' : 'Players', 'Pemain')}
         </span>
       </div>
 
