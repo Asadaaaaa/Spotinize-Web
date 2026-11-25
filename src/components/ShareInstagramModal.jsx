@@ -15,13 +15,14 @@ export function ShareInstagramModal({
   user,
   score = 0,
   isWinner = false,
-  mode = 'SOLO', // 'PROFILE' | 'SOLO' | 'MULTIPLAYER'
+  mode = 'SOLO', // 'PROFILE' | 'SOLO' | 'MULTIPLAYER' | 'DAILY'
   category = 'Global Trends',
   totalSongs = 5,
   thinkingTime = 0,
   leaderboard = [],
   rank = 1,
-  tracks = []
+  tracks = [],
+  emojiGrid = null
 }) {
   const { tx, tCategory } = useLanguage();
   const cardRef = useRef(null);
@@ -32,9 +33,10 @@ export function ShareInstagramModal({
 
   const isProfileMode = mode === 'PROFILE';
   const isMultiplayerMode = mode === 'MULTIPLAYER';
-  const isSoloMode = !isProfileMode && !isMultiplayerMode;
+  const isDailyMode = mode === 'DAILY';
+  const isSoloMode = !isProfileMode && !isMultiplayerMode && !isDailyMode;
   const isLocalHost = typeof window === 'undefined' || !window.location?.host || /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.host);
-  const siteDomain = isLocalHost ? 'spotinize.hopto.org' : window.location.host;
+  const siteDomain = 'bit.ly/spotinize';
   const siteOrigin = isLocalHost ? 'https://spotinize.hopto.org' : window.location.origin;
 
   const handleDownload = async () => {
@@ -89,9 +91,11 @@ export function ShareInstagramModal({
             <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>
               {isProfileMode
                 ? tx('Share Profile to Story', 'Share Profil ke Story')
-                : isMultiplayerMode
-                  ? tx('Share Multiplayer Duel Result', 'Share Hasil Duel Multiplayer')
-                  : tx('Share Solo Game Score', 'Share Skor Game Solo')}
+                : isDailyMode
+                  ? tx('Share Spotinize Daily', 'Share Spotinize Daily')
+                  : isMultiplayerMode
+                    ? tx('Share Multiplayer Duel Result', 'Share Hasil Duel Multiplayer')
+                    : tx('Share Solo Game Score', 'Share Skor Game Solo')}
             </h3>
             <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
               {tx('9:16 story card ready to post to Instagram Story', 'Story card 9:16 siap posting ke Instagram Story')}
@@ -229,6 +233,92 @@ export function ShareInstagramModal({
             </div>
           )}
 
+          {/* ----- CASE D: SPOTINIZE DAILY STORY (Matte Dark, Spoiler-Free) ----- */}
+          {isDailyMode && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', flex: 1, justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Avatar
+                  src={user?.avatarUrl}
+                  alt={user?.displayName}
+                  size="sm"
+                  seed={user?.id || user?.displayName}
+                  frame={user?.equippedFrame}
+                  style={{ width: '40px', height: '40px' }}
+                />
+                <div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 900, color: '#ffffff' }}>{user?.displayName || 'Player'}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#1DB954', fontWeight: 700 }}>SPOTINIZE DAILY · SPOILER FREE</div>
+                </div>
+              </div>
+
+              <div style={{
+                backgroundColor: '#14141a',
+                border: '1px solid #22222c',
+                borderRadius: '16px',
+                padding: '18px 14px',
+                textAlign: 'center'
+              }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Daily Score
+                </span>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '3.2rem',
+                  fontWeight: 900,
+                  lineHeight: 1,
+                  color: '#1DB954',
+                  margin: '6px 0'
+                }}>
+                  {score}
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#a1a1aa', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                  <span>{thinkingTime}s thinking time</span>
+                  <span>•</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#fb923c', fontWeight: 700 }}>
+                    <Flame size={12} /> {user?.currentStreak || 1} day streak
+                  </span>
+                </div>
+              </div>
+
+              <div style={{
+                backgroundColor: '#14141a',
+                border: '1px solid #22222c',
+                borderRadius: '14px',
+                padding: '14px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#8e8e93', textTransform: 'uppercase' }}>
+                  Reveal Grid
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center' }}>
+                  {tracks.slice(0, 5).map((t, i) => (
+                    <span key={i} style={{
+                      padding: '6px 9px',
+                      borderRadius: '8px',
+                      backgroundColor: t.isCorrect ? 'rgba(29, 185, 84, 0.16)' : '#1c1c24',
+                      border: `1px solid ${t.isCorrect ? '#1DB954' : '#2a2a36'}`,
+                      fontSize: '0.76rem',
+                      fontWeight: 800,
+                      color: t.isCorrect ? '#4ade80' : '#8e8e93',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      {t.isCorrect ? <Check size={12} /> : <X size={12} />} #{i + 1}
+                    </span>
+                  ))}
+                </div>
+                {emojiGrid && (
+                  <div style={{ fontSize: '0.68rem', color: '#a1a1aa', textAlign: 'center', marginTop: '4px', lineHeight: 1.4 }}>
+                    {emojiGrid}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ----- CASE B: SOLO RESULT STORY ----- */}
           {isSoloMode && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', flex: 1, justifyContent: 'center' }}>
@@ -262,8 +352,8 @@ export function ShareInstagramModal({
                   {score}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '0.75rem', color: '#d1d1d6', borderTop: '1px solid #22222c', paddingTop: '8px', marginTop: '4px' }}>
-                  <span>⏱️ <b>{thinkingTime}s</b> thinking</span>
-                  <span>🎯 <b>{totalSongs}/{totalSongs}</b> {tx('guessed', 'tertebak')}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Clock size={12} color="#1DB954" /> <b>{thinkingTime}s</b> thinking</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Award size={12} color="#1DB954" /> <b>{totalSongs}/{totalSongs}</b> {tx('guessed', 'tertebak')}</span>
                 </div>
               </div>
 
@@ -303,8 +393,9 @@ export function ShareInstagramModal({
                     </div>
                   ))
                 ) : (
-                  <div style={{ backgroundColor: '#14141a', border: '1px solid #22222c', borderRadius: '8px', padding: '10px', fontSize: '0.75rem', color: '#8e8e93', textAlign: 'center' }}>
-                    {tx('All songs guessed perfectly ⚡', 'Semua lagu tertebak sempurna ⚡')}
+                  <div style={{ backgroundColor: '#14141a', border: '1px solid #22222c', borderRadius: '8px', padding: '10px', fontSize: '0.75rem', color: '#8e8e93', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                    <Zap size={13} color="#1DB954" />
+                    <span>{tx('All songs guessed perfectly', 'Semua lagu tertebak sempurna')}</span>
                   </div>
                 )}
               </div>
@@ -343,7 +434,11 @@ export function ShareInstagramModal({
                   fontWeight: 900,
                   fontSize: '0.85rem'
                 }}>
-                  {isWinner || rank === 1 ? '🥇 1ST PLACE WINNER' : tx(`RANK #${rank} OF ${leaderboard.length || 2} PLAYERS`, `RANK #${rank} DARI ${leaderboard.length || 2} PEMAIN`)}
+                  {isWinner || rank === 1 ? (
+                    <>
+                      <Trophy size={14} /> <span>1ST PLACE WINNER</span>
+                    </>
+                  ) : tx(`RANK #${rank} OF ${leaderboard.length || 2} PLAYERS`, `RANK #${rank} DARI ${leaderboard.length || 2} PEMAIN`)}
                 </div>
                 <div style={{ fontSize: '0.7rem', color: '#8e8e93', marginTop: '4px' }}>
                   {tCategory(category)} • {totalSongs} {tx('Songs', 'Lagu')}
@@ -395,8 +490,8 @@ export function ShareInstagramModal({
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 800 }}>
-                          {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: idx === 0 ? '#facc15' : idx === 1 ? '#cbd5e1' : idx === 2 ? '#cd7f32' : '#8e8e93' }}>
+                          #{idx + 1}
                         </span>
                         <span style={{ fontSize: '0.78rem', fontWeight: 800, color: isMe ? '#1DB954' : '#ffffff' }}>
                           {p.displayName} {isMe && '(You)'}

@@ -264,3 +264,115 @@ export function TrackDetailSkeleton() {
     </div>
   );
 }
+
+export function FriendsSkeleton({ count = 5 }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }} aria-busy="true" aria-label="Loading friends">
+      {Array.from({ length: count }).map((_, idx) => (
+        <div
+          key={idx}
+          className="friend-card"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            padding: '12px 14px',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            pointerEvents: 'none'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+            <SkeletonBlock width="44px" height="44px" radius="50%" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <SkeletonBlock width="42%" height="13px" radius="999px" />
+              <SkeletonBlock width="58%" height="10px" radius="999px" />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <SkeletonBlock width="52px" height="22px" radius="999px" />
+            <SkeletonBlock width="74px" height="30px" radius="999px" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function StoreSkeleton() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }} aria-busy="true" aria-label="Loading store">
+      {/* Essentials skeleton */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <SkeletonBlock width="84px" height="10px" radius="999px" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px' }}>
+          {Array.from({ length: 2 }).map((_, idx) => (
+            <div
+              key={idx}
+              style={{
+                padding: '14px 16px',
+                borderRadius: '14px',
+                backgroundColor: '#131319',
+                border: '1px solid rgba(255,255,255,0.07)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                <SkeletonBlock width="38px" height="38px" radius="10px" style={{ flexShrink: 0 }} />
+                <SkeletonBlock width="55%" height="14px" radius="999px" />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                <SkeletonBlock width="44px" height="11px" radius="999px" />
+                <SkeletonBlock width="56px" height="28px" radius="999px" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Cosmetics Catalog skeleton */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <SkeletonBlock width="120px" height="10px" radius="999px" />
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonBlock key={i} width="54px" height="24px" radius="999px" />
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '12px' }}>
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <div
+              key={idx}
+              style={{
+                padding: '14px',
+                borderRadius: '14px',
+                backgroundColor: '#131319',
+                border: '1px solid rgba(255,255,255,0.07)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}
+            >
+              <SkeletonBlock width="100%" height="84px" radius="10px" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <SkeletonBlock width="65%" height="14px" radius="999px" />
+                <SkeletonBlock width="40%" height="18px" radius="999px" />
+              </div>
+              <div style={{ marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <SkeletonBlock width="54px" height="14px" radius="999px" />
+                <SkeletonBlock width="60px" height="28px" radius="999px" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

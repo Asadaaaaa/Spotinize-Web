@@ -3,6 +3,8 @@ import confetti from 'canvas-confetti';
 import ApiClient from '../services/api.js';
 import socketService from '../services/socket.js';
 import audioPlayer from '../services/audioPlayer.js';
+import soundFx from '../services/soundFx.js';
+import haptics from '../services/haptics.js';
 import { useLanguage } from './useLanguage.jsx';
 
 export function useGame(gameId, user) {
@@ -35,6 +37,15 @@ export function useGame(gameId, user) {
   // Round over / result modal
   const [isRoundResultOpen, setIsRoundResultOpen] = useState(false);
   const [revealedTrack, setRevealedTrack] = useState(null);
+
+  // Speed Buzz realtime state
+  const [speedBuzzState, setSpeedBuzzState] = useState({
+    countdown: 0,
+    activeBuzzUserId: null,
+    activeBuzzName: null,
+    lockoutUntil: null,
+    roundWinner: null
+  });
 
   // Track if component is mounted to prevent stale setState
   const isMountedRef = useRef(true);
@@ -158,6 +169,9 @@ export function useGame(gameId, user) {
         setIsInitialGameReady(true);
         setIsAudioReady(true);
         setIsAudioLoading(false);
+        if (gameState?.gameSubtype === 'SPEED_BUZZ') {
+          socketService.getSocket().emit('speedbuzz:client_ready', { gameId });
+        }
       }, 400);
     };
 
@@ -284,6 +298,57 @@ export function useGame(gameId, user) {
       });
     };
 
+    const handleSpeedBuzzCountdown = ({ roundNumber, seconds }) => {
+      if (!isMountedRef.current) return;
+      setSpeedBuzzState(prev => ({ ...prev, countdown: seconds || 3, activeBuzzUserId: null, activeBuzzName: null, roundWinner: null }));
+      setRoundStatus('THINKING');
+      setRevealedTrack(null);
+      setFeedbackMessage(null);
+      loadGame();
+    };
+
+    const handleSpeedBuzzAutoReveal = ({ revealLevel: nextLvl }) => {
+      if (!isMountedRef.current) return;
+      setSpeedBuzzState(prev => ({ ...prev, countdown: 0 }));
+      setRevealLevel(nextLvl);
+      const trackId = gameState?.currentTrack?.id;
+      if (trackId) {
+        audioPlayer.playClue(`/api/audio/clue/${trackId}?duration=${nextLvl}`, nextLvl).catch(() => {});
+      }
+    };
+
+    const handleSpeedBuzzLocked = ({ userId: buzzerId, displayName }) => {
+      if (!isMountedRef.current) return;
+      audioPlayer.stop();
+      setSpeedBuzzState(prev => ({ ...prev, activeBuzzUserId: buzzerId, activeBuzzName: displayName }));
+    };
+
+    const handleSpeedBuzzLockout = ({ userId: lockedUserId, reason, lockoutUntil, leaderboard }) => {
+      if (!isMountedRef.current) return;
+      setSpeedBuzzState(prev => ({
+        ...prev,
+        activeBuzzUserId: null,
+        activeBuzzName: null,
+        lockoutUntil: lockedUserId === user?.id ? lockoutUntil : prev.lockoutUntil
+      }));
+      if (lockedUserId === user?.id) {
+        setFeedbackMessage({ isCorrect: false, text: reason });
+      }
+      if (leaderboard) {
+        setGameState(prev => prev ? { ...prev, leaderboard } : prev);
+      }
+    };
+
+    const handleSpeedBuzzRoundWon = ({ winner, track, leaderboard }) => {
+      if (!isMountedRef.current) return;
+      setSpeedBuzzState(prev => ({ ...prev, activeBuzzUserId: null, activeBuzzName: null, roundWinner: winner }));
+      if (track) setRevealedTrack(track);
+      setRoundStatus('GUESSED');
+      if (leaderboard) {
+        setGameState(prev => prev ? { ...prev, leaderboard } : prev);
+      }
+    };
+
     socket.on('connect', handleReconnect);
     socket.on('player:reconnected', handlePlayerReconnected);
     socket.on('score:update', handleScoreUpdate);
@@ -292,6 +357,11 @@ export function useGame(gameId, user) {
     socket.on('player:status_change', handlePlayerStatusChange);
     socket.on('player:left', handlePlayerLeft);
     socket.on('game:finish', handleGameFinish);
+    socket.on('speedbuzz:countdown', handleSpeedBuzzCountdown);
+    socket.on('speedbuzz:auto_reveal', handleSpeedBuzzAutoReveal);
+    socket.on('speedbuzz:locked', handleSpeedBuzzLocked);
+    socket.on('speedbuzz:lockout', handleSpeedBuzzLockout);
+    socket.on('speedbuzz:round_won', handleSpeedBuzzRoundWon);
 
     return () => {
       socket.off('connect', handleReconnect);
@@ -302,6 +372,11 @@ export function useGame(gameId, user) {
       socket.off('player:status_change', handlePlayerStatusChange);
       socket.off('player:left', handlePlayerLeft);
       socket.off('game:finish', handleGameFinish);
+      socket.off('speedbuzz:countdown', handleSpeedBuzzCountdown);
+      socket.off('speedbuzz:auto_reveal', handleSpeedBuzzAutoReveal);
+      socket.off('speedbuzz:locked', handleSpeedBuzzLocked);
+      socket.off('speedbuzz:lockout', handleSpeedBuzzLockout);
+      socket.off('speedbuzz:round_won', handleSpeedBuzzRoundWon);
       socket.emit('game:leave_room', { gameId });
       audioPlayer.cleanup();
     };
@@ -329,6 +404,7 @@ export function useGame(gameId, user) {
     if (!gameState?.currentTrack || isAudioLoading) return;
 
     audioPlayer.unlock();
+    haptics.cluePlay();
 
     if (!isTimerRunning && roundStatus === 'THINKING') {
       startTimer();
@@ -353,6 +429,8 @@ export function useGame(gameId, user) {
     if (isPlayingAudio || isAudioLoading || revealLevel >= 5.0 || roundStatus !== 'THINKING') return;
 
     audioPlayer.unlock();
+    soundFx.playRevealNext();
+    haptics.revealNext();
 
     try {
       const res = await ApiClient.post(`/game/${gameId}/reveal`);
@@ -401,6 +479,8 @@ export function useGame(gameId, user) {
       setFeedbackMessage({ isCorrect: res.isCorrect, text: feedbackText });
 
       if (res.isCorrect) {
+        soundFx.playCorrect(Number(revealLevel) <= 0.1);
+        haptics.correct();
         stopTimer();
         setRoundStatus('GUESSED');
         setRevealedTrack(res.targetTrack);
@@ -418,10 +498,15 @@ export function useGame(gameId, user) {
           audioPlayer.playClue(`/api/audio/clue/${playId}?duration=15`, 15.0).catch(() => {});
         }
       } else if (res.isRoundOver) {
+        soundFx.playWrong();
+        haptics.wrong();
         stopTimer();
         setRoundStatus('WRONG');
         setRevealedTrack(res.targetTrack);
         setIsRoundResultOpen(true);
+      } else {
+        soundFx.playWrong();
+        haptics.wrong();
       }
 
       loadGame();
@@ -434,6 +519,8 @@ export function useGame(gameId, user) {
   const skipRound = async () => {
     if (roundStatus !== 'THINKING') return;
     audioPlayer.stop();
+    soundFx.playSkip();
+    haptics.tap();
     stopTimer();
 
     try {
@@ -492,6 +579,17 @@ export function useGame(gameId, user) {
     }
   };
 
+  const emitSpeedBuzz = useCallback(() => {
+    audioPlayer.unlock();
+    soundFx.playBuzz();
+    haptics.buzz();
+    socketService.getSocket().emit('speedbuzz:buzz', { gameId });
+  }, [gameId]);
+
+  const submitSpeedBuzzGuess = useCallback((selectedTrack) => {
+    socketService.getSocket().emit('speedbuzz:guess', { gameId, track: selectedTrack });
+  }, [gameId]);
+
   const isWaitingForOthers = Boolean(gameState?.isWaitingForOthers);
 
   return {
@@ -513,6 +611,9 @@ export function useGame(gameId, user) {
     isRoundResultOpen,
     revealedTrack,
     isWaitingForOthers,
+    speedBuzzState,
+    emitSpeedBuzz,
+    submitSpeedBuzzGuess,
     playClue,
     revealNext,
     submitGuess,

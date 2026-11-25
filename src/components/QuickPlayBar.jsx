@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   User, Users, Globe2, Radio, Library, Mic2, Play, Plus, LogIn,
-  Loader2, Search, Check, X, History, Disc3, Calendar, ChevronDown, ChevronUp
+  Loader2, Search, Check, X, History, Disc3, Calendar, ChevronDown, ChevronUp,
+  Sparkles, Shield, Swords, Copy
 } from 'lucide-react';
 import Button from './Button.jsx';
+import { RankedTierBadge } from './ItemRarityBadge.jsx';
 import ApiClient from '../services/api.js';
 import { useLanguage } from '../hooks/useLanguage.jsx';
 
@@ -13,6 +15,13 @@ const POPULAR_ARTISTS = [
 ];
 
 const SONG_COUNTS = [5, 10, 15];
+
+const MP_MODES = [
+  { id: 'CLASSIC', label: 'Classic', desc: 'Adu skor standar' },
+  { id: 'SURVIVAL', label: 'Survival / Royale', desc: '3 nyawa / eliminasi' },
+  { id: 'SPEED_BUZZ', label: 'Speed Buzz', desc: 'Rebutan tombol Buzz!' },
+  { id: 'SQUAD_2V2', label: '2v2 Squad', desc: 'Tim A vs Tim B' }
+];
 
 export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
   const { t, tx } = useLanguage();
@@ -49,8 +58,14 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
     };
   });
 
+  const [playTab, setPlayTab] = useState('CLASSIC'); // 'CLASSIC' | 'DAILY' | 'RANKED'
   const [mode, setMode] = useState('SOLO'); // 'SOLO' | 'MULTIPLAYER'
   const [multiplayerAction, setMultiplayerAction] = useState('CREATE'); // 'CREATE' | 'JOIN'
+  const [mpSubtype, setMpSubtype] = useState('CLASSIC');
+  const [dailyStatus, setDailyStatus] = useState(null);
+  const [rankedData, setRankedData] = useState(null);
+  const [dailyCopied, setDailyCopied] = useState(false);
+  const [startingSpecial, setStartingSpecial] = useState(null);
   const [category, setCategory] = useState(null);
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
@@ -181,6 +196,51 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
     }
   };
 
+  useEffect(() => {
+    if (!user?.id) return;
+    ApiClient.get('/daily/status').then(setDailyStatus).catch(() => {});
+    ApiClient.get('/ranked/summary').then(setRankedData).catch(() => {});
+  }, [user?.id]);
+
+  const handlePlayDaily = async () => {
+    try {
+      setStartingSpecial('daily');
+      setError(null);
+      const res = await ApiClient.post('/daily/play');
+      if (res?.gameState) onGameCreated(res.gameState);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setStartingSpecial(null);
+    }
+  };
+
+  const handlePlayRanked = async () => {
+    try {
+      setStartingSpecial('ranked');
+      setError(null);
+      const res = await ApiClient.post('/ranked/solo/start');
+      if (res?.id) onGameCreated(res);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setStartingSpecial(null);
+    }
+  };
+
+  const handleAcceptDuel = async (duelId) => {
+    try {
+      setStartingSpecial(`duel_${duelId}`);
+      setError(null);
+      const res = await ApiClient.post(`/ranked/duel/${duelId}/accept`);
+      if (res?.gameState) onGameCreated(res.gameState);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setStartingSpecial(null);
+    }
+  };
+
   const handleCreateRoom = async () => {
     if (!isCategoryReady) return;
     try {
@@ -190,7 +250,8 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
         userId: user.id,
         category,
         artistQuery: getSubQuery(),
-        numberOfSongs
+        numberOfSongs,
+        gameSubtype: mpSubtype
       });
       onJoinRoom(res);
     } catch (err) {
@@ -237,23 +298,28 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {/* Mode Segmented Toggle */}
+          {/* 3-Mode Top Selector: Classic | Daily | Ranked */}
           <div className="segmented-pill">
             <button
               type="button"
-              className={`segmented-pill-btn ${mode === 'SOLO' ? 'active' : ''}`}
-              onClick={() => setMode('SOLO')}
+              className={`segmented-pill-btn ${playTab === 'CLASSIC' ? 'active' : ''}`}
+              onClick={() => setPlayTab('CLASSIC')}
             >
-              <User size={13} />
-              <span>Solo</span>
+              <span>Classic</span>
             </button>
             <button
               type="button"
-              className={`segmented-pill-btn ${mode === 'MULTIPLAYER' ? 'active' : ''}`}
-              onClick={() => setMode('MULTIPLAYER')}
+              className={`segmented-pill-btn ${playTab === 'DAILY' ? 'active' : ''}`}
+              onClick={() => setPlayTab('DAILY')}
             >
-              <Users size={13} />
-              <span>Multiplayer</span>
+              <span>Daily</span>
+            </button>
+            <button
+              type="button"
+              className={`segmented-pill-btn ${playTab === 'RANKED' ? 'active' : ''}`}
+              onClick={() => setPlayTab('RANKED')}
+            >
+              <span>Ranked</span>
             </button>
           </div>
         </div>
@@ -274,31 +340,211 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
 
       {!collapsed && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* Multiplayer Sub-Switch */}
-          {mode === 'MULTIPLAYER' && (
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                type="button"
-                className={`btn btn-sm ${multiplayerAction === 'CREATE' ? 'btn-secondary' : 'btn-ghost'}`}
-                style={{
-                  flex: 1,
-                  borderColor: multiplayerAction === 'CREATE' ? 'var(--color-primary)' : 'var(--color-border)'
-                }}
-                onClick={() => setMultiplayerAction('CREATE')}
-              >
-                <Plus size={14} /> {t('dashCreateRoom')}
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${multiplayerAction === 'JOIN' ? 'btn-secondary' : 'btn-ghost'}`}
-                style={{
-                  flex: 1,
-                  borderColor: multiplayerAction === 'JOIN' ? 'var(--color-primary)' : 'var(--color-border)'
-                }}
-                onClick={() => setMultiplayerAction('JOIN')}
-              >
-                <LogIn size={14} /> {t('dashJoinRoom')}
-              </button>
+          {/* TAB 2: SPOTINIZE DAILY */}
+          {playTab === 'DAILY' && (
+            <div style={{
+              padding: '16px',
+              borderRadius: '14px',
+              backgroundColor: '#14141b',
+              border: '1px solid rgba(29, 185, 84, 0.35)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '1.05rem', fontWeight: 900, color: 'var(--color-text-bright)' }}>
+                    <span>Spotinize Daily #{dailyStatus?.dailyNumber || '—'}</span>
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                    {tx(
+                      '5 full-random songs · 1 try/day · Reset 00:00 WIB',
+                      '5 lagu acak penuh · 1x main/hari · Reset 00:00 WIB'
+                    )}
+                    {typeof dailyStatus?.participantCount === 'number' && (
+                      <> · {dailyStatus.participantCount} {tx('played', 'main')}</>
+                    )}
+                  </p>
+                </div>
+
+                {dailyStatus?.status === 'COMPLETED' ? (
+                  <span className="badge badge-green" style={{ fontSize: '0.78rem', padding: '5px 10px', flexShrink: 0 }}>
+                    {tx(`Done · ${dailyStatus.score} pts (#${dailyStatus.rank || '-'})`, `Selesai · ${dailyStatus.score} pts (#${dailyStatus.rank || '-'})`)}
+                  </span>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={startingSpecial === 'daily'}
+                    onClick={handlePlayDaily}
+                    icon={startingSpecial === 'daily' ? <Loader2 size={15} className="spin" /> : <Play size={15} fill="#000" />}
+                    style={{ padding: '9px 18px', fontWeight: 800, flexShrink: 0 }}
+                  >
+                    {startingSpecial === 'daily'
+                      ? tx('Starting...', 'Memulai...')
+                      : dailyStatus?.status === 'IN_PROGRESS'
+                        ? tx('Resume Daily', 'Lanjutkan Daily')
+                        : tx('Play Daily', 'Mainkan Daily')}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: SOLO RANKED */}
+          {playTab === 'RANKED' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{
+                padding: '16px',
+                borderRadius: '14px',
+                backgroundColor: '#14141b',
+                border: '1px solid rgba(56, 189, 248, 0.32)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '1.05rem', fontWeight: 900, color: 'var(--color-text-bright)' }}>
+                      {rankedData?.summary?.seasonName || 'Solo Ranked'}
+                    </span>
+                    {rankedData?.summary && (
+                      <RankedTierBadge tier={rankedData.summary.tier} rp={rankedData.summary.rp} compact />
+                    )}
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                    {rankedData?.summary?.isInPlacement
+                      ? tx(
+                          `Placement Matches: ${rankedData.summary.placementGamesPlayed}/5 completed`,
+                          `Placement Matches: ${rankedData.summary.placementGamesPlayed}/5 selesai`
+                        )
+                      : tx(
+                          `5 competitive tracks · 0s queue · ${rankedData?.summary?.rankedWins || 0}W / ${rankedData?.summary?.rankedGamesPlayed || 0}G`,
+                          `5 lagu kompetitif · tanpa antre · ${rankedData?.summary?.rankedWins || 0}W / ${rankedData?.summary?.rankedGamesPlayed || 0}G`
+                        )}
+                  </p>
+                  {rankedData?.summary?.demotionShieldGames > 0 && (
+                    <div style={{ fontSize: '0.73rem', color: '#38bdf8', fontWeight: 700, marginTop: '4px' }}>
+                      {tx(`Demotion Shield active (${rankedData.summary.demotionShieldGames} games)`, `Demotion Shield aktif (${rankedData.summary.demotionShieldGames} game)`)}
+                    </div>
+                  )}
+                </div>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={startingSpecial === 'ranked'}
+                  onClick={handlePlayRanked}
+                  icon={startingSpecial === 'ranked' ? <Loader2 size={15} className="spin" /> : <Play size={15} fill="#000" />}
+                  style={{ padding: '9px 18px', fontWeight: 800, flexShrink: 0 }}
+                >
+                  {startingSpecial === 'ranked' ? tx('Starting...', 'Memulai...') : tx('Play Solo Ranked', 'Main Solo Ranked')}
+                </Button>
+              </div>
+
+              {(rankedData?.pendingDuels || []).filter(d => d.opponentId === user?.id && d.challengerScore !== null && d.opponentScore === null).map(d => (
+                <div key={d.id} style={{
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(250, 204, 21, 0.08)',
+                  border: '1px solid rgba(250, 204, 21, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '10px',
+                  fontSize: '0.8rem'
+                }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <strong>{d.challenger?.displayName}</strong> {tx(`challenged you (${d.challengerScore} pts)`, `menantangmu (${d.challengerScore} pts)`)}
+                  </span>
+                  <Button size="sm" variant="primary" disabled={startingSpecial === `duel_${d.id}`} onClick={() => handleAcceptDuel(d.id)}>
+                    {tx('Accept Duel', 'Terima')}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* TAB 1: CLASSIC (Solo | Multiplayer + Category + Song Count) */}
+          {playTab === 'CLASSIC' && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--color-text-dim)', textTransform: 'uppercase' }}>
+                  {tx('Classic Mode', 'Mode Klasik')}
+                </span>
+                <div className="segmented-pill">
+                  <button
+                    type="button"
+                    className={`segmented-pill-btn ${mode === 'SOLO' ? 'active' : ''}`}
+                    onClick={() => setMode('SOLO')}
+                  >
+                    <User size={13} />
+                    <span>Solo</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`segmented-pill-btn ${mode === 'MULTIPLAYER' ? 'active' : ''}`}
+                    onClick={() => setMode('MULTIPLAYER')}
+                  >
+                    <Users size={13} />
+                    <span>Multiplayer</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Multiplayer Sub-Switch */}
+              {mode === 'MULTIPLAYER' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${multiplayerAction === 'CREATE' ? 'btn-secondary' : 'btn-ghost'}`}
+                  style={{
+                    flex: 1,
+                    borderColor: multiplayerAction === 'CREATE' ? 'var(--color-primary)' : 'var(--color-border)'
+                  }}
+                  onClick={() => setMultiplayerAction('CREATE')}
+                >
+                  <Plus size={14} /> {t('dashCreateRoom')}
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${multiplayerAction === 'JOIN' ? 'btn-secondary' : 'btn-ghost'}`}
+                  style={{
+                    flex: 1,
+                    borderColor: multiplayerAction === 'JOIN' ? 'var(--color-primary)' : 'var(--color-border)'
+                  }}
+                  onClick={() => setMultiplayerAction('JOIN')}
+                >
+                  <LogIn size={14} /> {t('dashJoinRoom')}
+                </button>
+              </div>
+
+              {multiplayerAction === 'CREATE' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '6px' }}>
+                  {MP_MODES.map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setMpSubtype(m.id)}
+                      style={{
+                        padding: '7px 10px',
+                        borderRadius: '10px',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        backgroundColor: mpSubtype === m.id ? 'rgba(29, 185, 84, 0.14)' : '#14141a',
+                        border: mpSubtype === m.id ? '1px solid var(--color-primary)' : '1px solid #262632',
+                        color: 'var(--color-text-bright)'
+                      }}
+                    >
+                      <div style={{ fontSize: '0.78rem', fontWeight: 800 }}>{m.label}</div>
+                      <div style={{ fontSize: '0.67rem', color: 'var(--color-text-dim)' }}>{m.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -677,9 +923,9 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
                     {[
-                      { id: 'ALL', label: tx('All', 'Semua'), flag: '✨' },
-                      { id: 'INDO', label: 'Indonesia', flag: '🇮🇩' },
-                      { id: 'GLOBAL', label: 'Global', flag: '🌍' }
+                      { id: 'ALL', label: tx('All', 'Semua'), icon: <Sparkles size={13} /> },
+                      { id: 'INDO', label: 'Indonesia', icon: <Radio size={13} /> },
+                      { id: 'GLOBAL', label: 'Global', icon: <Globe2 size={13} /> }
                     ].map(sub => {
                       const isSelected = nostalgiaRegion === sub.id;
                       return (
@@ -690,7 +936,7 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
                           className={`btn btn-sm ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
                           style={{ borderRadius: 'var(--radius-sm)', padding: '8px 6px' }}
                         >
-                          <span>{sub.flag}</span>
+                          {sub.icon}
                           <span>{sub.label}</span>
                         </button>
                       );
@@ -865,7 +1111,7 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
                     disabled={loading}
                     onClick={mode === 'SOLO' ? handleStartSolo : handleCreateRoom}
                     icon={loading ? <Loader2 size={15} className="spin" /> : <Play size={15} fill="#000" />}
-                    style={{ padding: '9px 18px', fontWeight: 800 }}
+                    style={{ padding: '9px 18px', fontWeight: 800, flexShrink: 0 }}
                   >
                     {loading
                       ? (mode === 'SOLO' ? t('dashPreparing') : t('dashCreatingRoom'))
@@ -873,6 +1119,8 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
                   </Button>
                 </div>
               )}
+            </>
+          )}
             </>
           )}
         </div>

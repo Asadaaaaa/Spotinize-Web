@@ -59,15 +59,16 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
       } catch (e) {}
     };
 
-    const handleLobbyUpdate = ({ players: updatedPlayers, hostId, status }) => {
+    const handleLobbyUpdate = ({ players: updatedPlayers, hostId, status, gameSubtype }) => {
       if (Array.isArray(updatedPlayers)) {
         setPlayers(updatedPlayers);
       }
-      if (hostId || status) {
+      if (hostId || status || gameSubtype) {
         setGame(prev => prev ? {
           ...prev,
           ...(hostId ? { hostId } : {}),
-          ...(status ? { status } : {})
+          ...(status ? { status } : {}),
+          ...(gameSubtype ? { gameSubtype } : {})
         } : prev);
       }
     };
@@ -168,7 +169,7 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <span className="badge badge-green" style={{ marginBottom: '6px' }}>
-              <Sparkles size={12} /> Multiplayer Lobby
+              <Sparkles size={12} /> Multiplayer · {game?.gameSubtype || 'CLASSIC'}
             </span>
             <h2 style={{ fontSize: '1.6rem' }}>{tx('Waiting Room', 'Ruang Tunggu')}</h2>
           </div>
@@ -261,6 +262,31 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
           </Card>
         </div>
 
+        {/* 2v2 Squad Team Switcher */}
+        {game?.gameSubtype === 'SQUAD_2V2' && (
+          <Card style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', backgroundColor: '#14141b' }}>
+            <div style={{ fontSize: '0.84rem', fontWeight: 800 }}>
+              {tx('Choose Your Squad Team:', 'Pilih Tim Squad Kamu:')}
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {['A', 'B'].map(team => {
+                const myTeam = players.find(p => p.userId === user?.id)?.teamId;
+                const count = players.filter(p => p.teamId === team).length;
+                return (
+                  <Button
+                    key={team}
+                    size="sm"
+                    variant={myTeam === team ? 'primary' : 'secondary'}
+                    onClick={() => ApiClient.post(`/game/${game.id}/team`, { teamId: team }).catch(e => setError(e.message))}
+                  >
+                    Team {team} ({count})
+                  </Button>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
         {/* Player List */}
         <div>
           <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '12px' }}>
@@ -289,10 +315,21 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
                       alt={p.displayName}
                       size="sm"
                       seed={p.userId || p.displayName}
+                      frame={p.equippedFrame}
                     />
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>
-                        {p.displayName} {isMe && '(You)'}
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span>{p.displayName} {isMe && '(You)'}</span>
+                        {p.teamId && (
+                          <span className="badge" style={{
+                            fontSize: '0.65rem',
+                            padding: '1px 6px',
+                            backgroundColor: p.teamId === 'A' ? 'rgba(56,189,248,0.16)' : 'rgba(244,63,94,0.16)',
+                            color: p.teamId === 'A' ? '#38bdf8' : '#fb7185'
+                          }}>
+                            Team {p.teamId}
+                          </span>
+                        )}
                         {p.connectionStatus === 'DISCONNECTED' && (
                           <span className="badge badge-red" style={{ marginLeft: '6px', fontSize: '0.65rem', padding: '2px 6px' }}>
                             DC

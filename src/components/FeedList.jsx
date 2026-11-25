@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Music2 } from 'lucide-react';
+import { Loader2, Music2, Plus } from 'lucide-react';
 import ApiClient from '../services/api.js';
 import FeedPostCard from './FeedPostCard.jsx';
+import Avatar from './Avatar.jsx';
 import Button from './Button.jsx';
 import { FeedSkeleton } from './Skeletons.jsx';
 import { useLanguage } from '../hooks/useLanguage.jsx';
 
-export function FeedList({ currentUserId, latestCreatedPost = null, onOpenPublicProfile, onPlayChallenge }) {
+export function FeedList({ user = null, currentUserId, latestCreatedPost = null, onOpenPublicProfile, onPlayChallenge, onOpenComposer }) {
   const { tx } = useLanguage();
   const [activeTab, setActiveTab] = useState('explore'); // 'explore' (default) | 'following'
   const [posts, setPosts] = useState([]);
@@ -78,6 +79,60 @@ export function FeedList({ currentUserId, latestCreatedPost = null, onOpenPublic
           {tx('Following', 'Following')}
         </button>
       </div>
+
+      {/* Post Composer Card Below Explore / Following Tabs */}
+      {onOpenComposer && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpenComposer()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onOpenComposer();
+            }
+          }}
+          style={{
+            margin: '12px 0 4px',
+            padding: '10px 12px',
+            borderRadius: '14px',
+            backgroundColor: '#131319',
+            border: '1px solid rgba(255,255,255,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          <Avatar
+            src={user?.avatarUrl}
+            alt={user?.displayName}
+            seed={user?.id || user?.displayName}
+            frame={user?.equippedFrame}
+            style={{ width: '34px', height: '34px', flexShrink: 0 }}
+          />
+          <span style={{ flex: 1, fontSize: '0.82rem', color: 'var(--color-text-dim)', fontWeight: 500 }}>
+            {tx('Share a song or music note...', 'Bagikan lagu atau catatan musikmu...')}
+          </span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '6px 12px',
+              borderRadius: '999px',
+              backgroundColor: 'var(--color-primary)',
+              color: '#000',
+              fontSize: '0.76rem',
+              fontWeight: 800,
+              flexShrink: 0
+            }}
+          >
+            <Plus size={14} strokeWidth={2.6} />
+            <span>{tx('Post', 'Post')}</span>
+          </span>
+        </div>
+      )}
 
       {loading ? (
         <FeedSkeleton count={3} />

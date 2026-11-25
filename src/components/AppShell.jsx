@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Home, Search, Trophy, Users, Plus, Bell, Globe, User, LogOut,
-  ChevronUp, ChevronDown, Flame, Volume2, VolumeX, Bookmark
+  ChevronUp, ChevronDown, Flame, Volume2, VolumeX, ShoppingBag, Gift, Target, Music, Ticket, Snowflake, Settings
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useLanguage } from '../hooks/useLanguage.jsx';
@@ -16,10 +16,15 @@ export function AppShell({
   currentTab,
   onNavigate,
   unreadCount = 0,
+  canClaimDailyLogin = false,
+  claimableQuestsCount = 0,
+  onOpenDailyLogin,
+  onOpenQuests,
   onOpenNotifications,
   onOpenComposer,
   onOpenSavedSongs,
   onOpenPublicProfile,
+  onOpenSettings,
   children
 }) {
   const { user, logout } = useAuth();
@@ -73,13 +78,21 @@ export function AppShell({
     { id: 'dashboard', label: t('navHome'), icon: Home },
     { id: 'search', label: t('navSearch'), icon: Search },
     { id: 'leaderboard', label: t('navRank'), icon: Trophy },
-    { id: 'friends', label: t('navFriends'), icon: Users }
+    { id: 'friends', label: t('navFriends'), icon: Users },
+    { id: 'store', label: t('navStore'), icon: ShoppingBag }
+  ];
+
+  const mobileNavItems = [
+    { id: 'dashboard', label: t('navHome'), icon: Home },
+    { id: 'store', label: t('navStore'), icon: ShoppingBag },
+    { id: 'search', label: t('navSearch'), icon: Search },
+    { id: 'leaderboard', label: t('navRank'), icon: Trophy }
   ];
 
   const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v0.6.0';
   const effectivePercent = muted ? 0 : Math.round(volume * 100);
 
-  const renderUserMenuContent = (closeMenu) => (
+  const renderUserMenuContent = (closeMenu, isMobile = false) => (
     <>
       <button
         type="button"
@@ -93,17 +106,19 @@ export function AppShell({
         <span>{t('navProfile')}</span>
       </button>
 
-      <button
-        type="button"
-        className="btn btn-ghost btn-sm sidebar-popover-item"
-        onClick={() => {
-          closeMenu();
-          onOpenSavedSongs?.();
-        }}
-      >
-        <Bookmark size={15} />
-        <span>{t('navSaved')}</span>
-      </button>
+      {isMobile && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm sidebar-popover-item"
+          onClick={() => {
+            closeMenu();
+            onNavigate('friends');
+          }}
+        >
+          <Users size={15} />
+          <span>{t('navFriends')}</span>
+        </button>
+      )}
 
       <button
         type="button"
@@ -122,44 +137,16 @@ export function AppShell({
         )}
       </button>
 
-      {/* Music Volume Control */}
-      <div className="volume-slider-row">
-        <button
-          type="button"
-          className="volume-mute-btn"
-          onClick={handleToggleMute}
-          title={muted ? tx('Unmute', 'Bunyikan') : tx('Mute', 'Bisukan')}
-        >
-          {muted || volume === 0 ? <VolumeX size={15} color="var(--color-danger)" /> : <Volume2 size={15} color="var(--color-primary)" />}
-        </button>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
-            <span>{t('gameVolume')}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-bright)' }}>{effectivePercent}%</span>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={muted ? 0 : volume}
-            onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-            className="volume-range-input"
-            aria-label={t('gameVolume')}
-          />
-        </div>
-      </div>
-
       <button
         type="button"
         className="btn btn-ghost btn-sm sidebar-popover-item"
-        onClick={() => toggleLang()}
+        onClick={() => {
+          closeMenu();
+          onOpenSettings?.();
+        }}
       >
-        <Globe size={15} color="var(--color-primary)" />
-        <span>{lang === 'en' ? 'Language' : 'Bahasa'}</span>
-        <span className="badge badge-gray" style={{ marginLeft: 'auto', fontSize: '0.65rem', padding: '1px 6px' }}>
-          {lang.toUpperCase()}
-        </span>
+        <Settings size={15} color="var(--color-primary)" />
+        <span>{tx('Settings', 'Pengaturan')}</span>
       </button>
 
       <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '4px 0' }} />
@@ -181,22 +168,57 @@ export function AppShell({
 
   return (
     <div className="app-shell-root">
-      {/* Mobile Compact Header with User Chip Dropdown */}
+      {/* Mobile Compact Header with Quick Actions + User Chip Dropdown */}
       <header className="mobile-top-header">
         <div
           onClick={() => onNavigate('landing')}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', minWidth: 0 }}
         >
           <Logo size="sm" />
-          <span className="version-pill">{versionStr}</span>
+          <span className="version-pill mobile-hide-xs">{versionStr}</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {user?.currentStreak > 0 && (
-            <span className="streak-pill" title={`${user.currentStreak} day streak`}>
-              <Flame size={13} /> {user.currentStreak}
-            </span>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          {/* Daily Login */}
+          <button
+            type="button"
+            className="icon-circle-btn"
+            onClick={() => onOpenDailyLogin?.()}
+            aria-label="Daily Login"
+            title="Daily Login"
+          >
+            <Gift size={16} color="#facc15" />
+            {canClaimDailyLogin && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '1px',
+                  right: '1px',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--color-primary)',
+                  border: '1.5px solid var(--color-surface)'
+                }}
+              />
+            )}
+          </button>
+
+          {/* Quests */}
+          <button
+            type="button"
+            className="icon-circle-btn"
+            onClick={() => onOpenQuests?.()}
+            aria-label="Quests"
+            title="Quests"
+          >
+            <Target size={16} color="#38bdf8" />
+            {claimableQuestsCount > 0 && (
+              <span className="notif-dot-badge" style={{ backgroundColor: '#38bdf8', boxShadow: 'none' }}>
+                {claimableQuestsCount > 9 ? '9+' : claimableQuestsCount}
+              </span>
+            )}
+          </button>
 
           {/* Mobile User Chip Dropdown */}
           <div ref={mobileMenuRef} style={{ position: 'relative' }}>
@@ -210,6 +232,7 @@ export function AppShell({
                 src={user?.avatarUrl}
                 alt={user?.displayName}
                 seed={user?.id || user?.displayName}
+                frame={user?.equippedFrame}
                 style={{ width: '26px', height: '26px' }}
               />
               <span className="mobile-user-chip-name">
@@ -230,7 +253,67 @@ export function AppShell({
 
             {isMobileMenuOpen && (
               <div className="mobile-user-popover">
-                {renderUserMenuContent(() => setIsMobileMenuOpen(false))}
+                <div
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '10px',
+                    backgroundColor: '#121218',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    marginBottom: '4px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--color-text-bright)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {user?.displayName}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                      <span style={{ fontSize: '0.64rem', fontWeight: 800, padding: '1px 6px', borderRadius: '999px', backgroundColor: 'rgba(192,132,252,0.14)', color: '#d8b4fe' }}>
+                        Lv.{user?.level || 1}
+                      </span>
+                      <span className="streak-pill-mini">
+                        <Flame size={10} /> {user?.currentStreak || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onNavigate('store');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      padding: '5px 8px',
+                      borderRadius: '8px',
+                      backgroundColor: '#0b0b10',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.73rem',
+                      fontWeight: 800,
+                      color: '#e5e7eb',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <Music size={12} color="var(--color-primary)" /> {user?.notesBalance || 0}
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <Ticket size={12} color="#38bdf8" /> {user?.gachaTickets || 0}
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <Snowflake size={12} color="#60a5fa" /> {user?.streakFreezes || 0}/2
+                    </span>
+                  </button>
+                </div>
+
+                {renderUserMenuContent(() => setIsMobileMenuOpen(false), true)}
               </div>
             )}
           </div>
@@ -277,6 +360,31 @@ export function AppShell({
               })}
             </nav>
 
+            {/* Quick Actions: Daily Login & Quests */}
+            <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ flex: 1, fontSize: '0.74rem', justifyContent: 'center', position: 'relative' }}
+                onClick={() => onOpenDailyLogin?.()}
+              >
+                <Gift size={14} color="#facc15" />
+                <span>Login</span>
+                {canClaimDailyLogin && (
+                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: 'var(--color-primary)' }} />
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ flex: 1, fontSize: '0.74rem', justifyContent: 'center' }}
+                onClick={() => onOpenQuests?.()}
+              >
+                <Target size={14} color="#38bdf8" />
+                <span>Quests{claimableQuestsCount > 0 ? ` (${claimableQuestsCount})` : ''}</span>
+              </button>
+            </div>
+
             {/* Primary + Post CTA */}
             <button
               type="button"
@@ -305,6 +413,7 @@ export function AppShell({
                     src={user?.avatarUrl}
                     alt={user?.displayName}
                     seed={user?.id || user?.displayName}
+                    frame={user?.equippedFrame}
                     style={{ width: '36px', height: '36px' }}
                   />
                   {unreadCount > 0 && (
@@ -314,30 +423,34 @@ export function AppShell({
 
                 <div style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
                   <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
                     fontSize: '0.88rem',
                     fontWeight: 800,
-                    color: 'var(--color-text-bright)'
-                  }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {user?.displayName}
-                    </span>
-                    {user?.currentStreak > 0 && (
-                      <span className="streak-pill-mini">
-                        <Flame size={10} /> {user.currentStreak}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{
-                    fontSize: '0.74rem',
-                    color: 'var(--color-text-dim)',
+                    color: 'var(--color-text-bright)',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap'
                   }}>
-                    @{user?.username}
+                    {user?.displayName}
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    marginTop: '3px'
+                  }}>
+                    <span style={{
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      padding: '1px 6px',
+                      borderRadius: '999px',
+                      backgroundColor: 'rgba(192,132,252,0.14)',
+                      color: '#d8b4fe'
+                    }}>
+                      Lv.{user?.level || 1}
+                    </span>
+                    <span className="streak-pill-mini">
+                      <Flame size={10} /> {user?.currentStreak || 0}
+                    </span>
                   </div>
                 </div>
 
@@ -363,19 +476,43 @@ export function AppShell({
         {/* RIGHT SIDEBAR */}
         <aside className="app-shell-right">
           <div className="app-shell-right-inner">
-            <GlobalTrendsCard />
-            <FollowingActivityCard
-              user={user}
-              onOpenPublicProfile={onOpenPublicProfile}
-              onNavigateFriends={() => onNavigate('friends')}
-            />
+            <div className="app-shell-right-scroll">
+              <GlobalTrendsCard />
+              <FollowingActivityCard
+                user={user}
+                onOpenPublicProfile={onOpenPublicProfile}
+                onNavigateFriends={() => onNavigate('friends')}
+              />
+            </div>
+
+            <button
+              type="button"
+              className="sidebar-wallet-floating"
+              onClick={() => onNavigate('store')}
+              title={tx('Open Store & Gacha', 'Buka Store & Gacha')}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <Music size={14} color="var(--color-primary)" />
+                <span>{user?.notesBalance || 0}</span>
+              </span>
+              <span style={{ width: '1px', height: '14px', backgroundColor: 'rgba(255,255,255,0.08)' }} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <Ticket size={14} color="#38bdf8" />
+                <span>{user?.gachaTickets || 0}</span>
+              </span>
+              <span style={{ width: '1px', height: '14px', backgroundColor: 'rgba(255,255,255,0.08)' }} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <Snowflake size={14} color="#60a5fa" />
+                <span>{user?.streakFreezes || 0}/2</span>
+              </span>
+            </button>
           </div>
         </aside>
       </div>
 
-      {/* Mobile Floating Bottom Nav (Home, Search, Center Raised + Post, Rank, Friends) */}
+      {/* Mobile Floating Bottom Nav (Home, Store, Search, Leaderboard) */}
       <nav className="bottom-nav-floating" aria-label="Mobile Bottom Navigation">
-        {navItems.slice(0, 2).map((item) => {
+        {mobileNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
           return (
@@ -385,33 +522,7 @@ export function AppShell({
               className={`floating-nav-item ${isActive ? 'active' : ''}`}
               onClick={() => onNavigate(item.id)}
             >
-              <Icon size={19} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-
-        {/* Center Raised Green + Post Button */}
-        <button
-          type="button"
-          className="floating-nav-post-btn"
-          onClick={() => onOpenComposer?.()}
-          aria-label={t('navPost')}
-        >
-          <Plus size={24} strokeWidth={2.8} />
-        </button>
-
-        {navItems.slice(2).map((item) => {
-          const Icon = item.icon;
-          const isActive = currentTab === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={`floating-nav-item ${isActive ? 'active' : ''}`}
-              onClick={() => onNavigate(item.id)}
-            >
-              <Icon size={19} />
+              <Icon size={18} strokeWidth={isActive ? 2.4 : 2} />
               <span>{item.label}</span>
             </button>
           );

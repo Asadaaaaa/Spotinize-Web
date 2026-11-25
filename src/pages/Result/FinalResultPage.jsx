@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Trophy, RotateCcw, Share2, Swords, Check, Loader2 } from 'lucide-react';
+import { Trophy, RotateCcw, Share2, Swords, Check, Loader2, Sparkles, Music, Shield, Copy } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import ShareInstagramModal from '../../components/ShareInstagramModal.jsx';
 import Avatar from '../../components/Avatar.jsx';
+import { RankedTierBadge } from '../../components/ItemRarityBadge.jsx';
 import ApiClient from '../../services/api.js';
+import soundFx from '../../services/soundFx.js';
+import haptics from '../../services/haptics.js';
 import { useLanguage } from '../../hooks/useLanguage.jsx';
 
 export function FinalResultPage({ gameState, user, onPlayAgain }) {
@@ -13,9 +16,12 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [sharingChallenge, setSharingChallenge] = useState(false);
   const [challengeShared, setChallengeShared] = useState(false);
+  const [copiedGrid, setCopiedGrid] = useState(false);
 
   const player = gameState?.player || {};
   const isMultiplayer = gameState?.mode === 'MULTIPLAYER';
+  const isDaily = gameState?.gameSubtype === 'DAILY';
+  const v07 = gameState?.v07Summary || null;
   const leaderboard = gameState?.leaderboard || [];
 
   const myEntry = leaderboard.find(p => p.userId === user?.id);
@@ -25,6 +31,8 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
   const isWinner = myRank === 1;
 
   useEffect(() => {
+    soundFx.playVictory();
+    haptics.victory();
     // Launch celebratory confetti
     confetti({
       particleCount: 80,
@@ -108,7 +116,81 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
               {myThinkingTime}s
             </div>
           </Card>
+
+          {v07 && (
+            <>
+              <Card style={{ padding: '16px 12px' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginBottom: '4px' }}>XP Earned</div>
+                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#c084fc', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                  <Sparkles size={15} /> +{v07.xpEarned || 0}
+                </div>
+              </Card>
+              <Card style={{ padding: '16px 12px' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginBottom: '4px' }}>Notes Earned</div>
+                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                  <Music size={15} /> +{v07.notesEarned || 0}
+                </div>
+              </Card>
+            </>
+          )}
         </div>
+
+        {/* v0.7 Badges: Perfect Run, Ranked RP Delta, Team Standings */}
+        {(v07?.perfectRun || v07?.rankedSummary || gameState?.teamStandings) && (
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {v07?.perfectRun && (
+              <Card style={{ padding: '12px 16px', backgroundColor: 'rgba(250, 204, 21, 0.1)', border: '1px solid rgba(250, 204, 21, 0.45)', fontWeight: 800, color: '#facc15', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <Sparkles size={16} />
+                <span>PERFECT RUN! 5/5 tanpa salah & tanpa skip (+50 Bonus PTS)</span>
+              </Card>
+            )}
+
+            {v07?.rankedSummary && (
+              <Card style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Shield size={18} color="#38bdf8" />
+                  <RankedTierBadge tier={v07.rankedSummary.tier} rp={v07.rankedSummary.rp} />
+                </div>
+                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: (v07.rpDelta || 0) >= 0 ? 'var(--color-primary)' : '#fb7185' }}>
+                  {v07.rankedSummary.isInPlacement
+                    ? `Placement ${v07.rankedSummary.placementGamesPlayed}/5`
+                    : `${(v07.rpDelta || 0) >= 0 ? '+' : ''}${v07.rpDelta || 0} RP`}
+                </div>
+              </Card>
+            )}
+
+            {gameState?.teamStandings && (
+              <Card style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8' }}>TEAM A</div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 900, fontFamily: 'var(--font-mono)' }}>{gameState.teamStandings.A?.avgScore || 0} AVG</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#fb7185' }}>TEAM B</div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 900, fontFamily: 'var(--font-mono)' }}>{gameState.teamStandings.B?.avgScore || 0} AVG</div>
+                </div>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {isDaily && v07?.dailyResult?.emojiGrid && (
+          <Card style={{ width: '100%', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-text-bright)' }}>{v07.dailyResult.emojiGrid}</div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                navigator.clipboard.writeText(v07.dailyResult.emojiGrid);
+                setCopiedGrid(true);
+                setTimeout(() => setCopiedGrid(false), 2000);
+              }}
+              icon={copiedGrid ? <Check size={14} color="var(--color-primary)" /> : <Copy size={14} />}
+            >
+              {copiedGrid ? tx('Copied!', 'Tersalin!') : tx('Copy Spoiler-Free Grid', 'Salin Emoji Grid')}
+            </Button>
+          </Card>
+        )}
 
         {/* Multiplayer Leaderboard List (if Multiplayer) */}
         {isMultiplayer && leaderboard.length > 0 && (
@@ -140,6 +222,7 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
                       alt={p.displayName}
                       size="sm"
                       seed={p.userId || p.displayName}
+                      frame={p.equippedFrame}
                     />
                     <div>
                       <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>
@@ -201,7 +284,7 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
               }
             >
               {challengeShared
-                ? tx('Challenge Shared to Feed ✓', 'Tantangan Dibagikan ke Feed ✓')
+                ? tx('Challenge Shared to Feed', 'Tantangan Dibagikan ke Feed')
                 : tx('Share Challenge to Feed', 'Bagikan Tantangan ke Feed')}
             </Button>
           )}
@@ -224,13 +307,14 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
         user={user}
         score={myScore}
         isWinner={isWinner}
-        mode={gameState?.mode || 'SOLO'}
+        mode={isDaily ? 'DAILY' : (gameState?.mode || 'SOLO')}
         category={gameState?.category}
         totalSongs={gameState?.numberOfSongs || 5}
         thinkingTime={myThinkingTime}
         leaderboard={leaderboard}
         rank={myRank}
         tracks={gameState?.tracks || gameState?.gameTracks || []}
+        emojiGrid={v07?.dailyResult?.emojiGrid || null}
       />
     </div>
   );

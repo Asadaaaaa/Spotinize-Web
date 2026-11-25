@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Flame, Play, Square, Bookmark, MessageCircle, Trash2, CheckCircle2,
-  Loader2, Send, Trophy, Award, ExternalLink, Heart
+  Loader2, Send, Trophy, Award, ExternalLink, Heart, Shield, SmilePlus
 } from 'lucide-react';
 import Avatar from './Avatar.jsx';
 import VinylArt from './VinylArt.jsx';
@@ -9,10 +9,12 @@ import BlindDropCard from './BlindDropCard.jsx';
 import AsyncChallengeCard from './AsyncChallengeCard.jsx';
 import ApiClient from '../services/api.js';
 import feedAudioManager from '../services/feedAudioManager.js';
+import soundFx from '../services/soundFx.js';
+import haptics from '../services/haptics.js';
 import { useTrackDetail } from '../hooks/useTrackDetail.jsx';
 import { useLanguage } from '../hooks/useLanguage.jsx';
 
-const REACTION_EMOJIS = ['🔥', '🎧', '🤯', '💀'];
+const REACTION_EMOJIS = ['❤️', '👍', '👏', '🔥', '👎'];
 
 function formatRelativeTime(dateString, lang = 'en') {
   if (!dateString) return '';
@@ -36,11 +38,25 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
   const [reactBusy, setReactBusy] = useState(false);
   const [bookmarkBusy, setBookmarkBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [revealDailySpoiler, setRevealDailySpoiler] = useState(false);
+  const [showReactPicker, setShowReactPicker] = useState(false);
+  const reactPickerRef = useRef(null);
 
   useEffect(() => {
     setPost(initialPost);
     setComments(initialPost.commentsPreview || []);
   }, [initialPost]);
+
+  useEffect(() => {
+    if (!showReactPicker) return;
+    const handleOutside = (e) => {
+      if (reactPickerRef.current && !reactPickerRef.current.contains(e.target)) {
+        setShowReactPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showReactPicker]);
 
   useEffect(() => {
     const unsub = feedAudioManager.subscribe(setAudioState);
@@ -67,6 +83,8 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
 
   const handleToggleReact = async (emoji) => {
     if (!currentUserId || reactBusy) return;
+    soundFx.playTap();
+    haptics.tap();
     try {
       setReactBusy(true);
       const res = await ApiClient.post(`/feed/posts/${post.id}/react`, { emoji });
@@ -206,6 +224,7 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
               src={author.avatarUrl}
               alt={author.displayName}
               seed={author.id || author.displayName}
+              frame={author.equippedFrame}
               style={{ width: '38px', height: '38px', flexShrink: 0 }}
             />
             <div style={{ minWidth: 0, flex: 1 }}>
@@ -213,6 +232,21 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
                 <span style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--color-text-bright)' }}>
                   {author.displayName || 'Player'}
                 </span>
+                <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '1px 5px', borderRadius: '999px', backgroundColor: '#1f2937', color: '#e5e7eb' }}>
+                  Lv.{author.level || 1}
+                </span>
+                {author.equippedTitle && (
+                  <span style={{
+                    fontSize: '0.64rem',
+                    fontWeight: 800,
+                    padding: '1px 6px',
+                    borderRadius: '999px',
+                    color: author.equippedTitle.visualConfig?.color || '#facc15',
+                    backgroundColor: author.equippedTitle.visualConfig?.bgColor || 'rgba(250,204,21,0.14)'
+                  }}>
+                    {author.equippedTitle.name}
+                  </span>
+                )}
                 {author.isOfficial && <CheckCircle2 size={14} color="var(--color-primary)" />}
                 {author.currentStreak > 0 && (
                   <span className="streak-pill-mini"><Flame size={10} /> {author.currentStreak}</span>
@@ -221,7 +255,6 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
                   @{author.username} · {formatRelativeTime(post.createdAt, lang)}
                 </span>
               </div>
-              {renderTypePill()}
             </div>
           </div>
 
@@ -240,11 +273,36 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
         </div>
       )}
 
-      {/* Post Caption */}
+      {/* Post Caption (with Daily Spoiler Shield if viewer hasn't played today's Daily) */}
       {displayContent && (
-        <p style={{ fontSize: '0.93rem', color: 'var(--color-text)', lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap' }}>
-          {displayContent}
-        </p>
+        post.isDailySpoilerHidden && !revealDailySpoiler ? (
+          <div style={{
+            position: 'relative',
+            padding: '12px',
+            borderRadius: '10px',
+            backgroundColor: '#14141a',
+            border: '1px solid #262632'
+          }}>
+            <p className="daily-spoiler-blur" style={{ fontSize: '0.9rem', color: 'var(--color-text)', lineHeight: 1.5, margin: 0 }}>
+              {displayContent}
+            </p>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setRevealDailySpoiler(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Shield size={14} color="var(--color-primary)" />
+                <span>{tx('Daily Spoiler Shield · Click to Reveal', 'Spoiler Daily · Klik untuk Buka')}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p style={{ fontSize: '0.93rem', color: 'var(--color-text)', lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap' }}>
+            {displayContent}
+          </p>
+        )
       )}
 
       {/* Optional Source Link (e.g. for Official AI News) */}
@@ -330,7 +388,7 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
         </div>
       )}
 
-      {/* Quick React & Comment Action Bar */}
+      {/* Quick React (Discord-style) & Comment Action Bar */}
       {isSpotinizePost ? (
         <div className="feed-actions-row">
           {(() => {
@@ -351,7 +409,68 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
       ) : (
         <div className="feed-actions-row">
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            {REACTION_EMOJIS.map((emoji) => {
+            {/* Single Reaction Trigger Button + Floating Picker Chip */}
+            <div ref={reactPickerRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className={`react-pill-btn ${showReactPicker ? 'active' : ''}`}
+                onClick={() => setShowReactPicker(prev => !prev)}
+                title={tx('Add reaction', 'Tambah reaksi')}
+                aria-label={tx('Add reaction', 'Tambah reaksi')}
+              >
+                <SmilePlus size={14} />
+              </button>
+
+              {showReactPicker && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 'calc(100% + 6px)',
+                    left: 0,
+                    zIndex: 60,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '5px 8px',
+                    borderRadius: '999px',
+                    backgroundColor: '#15151d',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    boxShadow: '0 10px 28px rgba(0,0,0,0.65)'
+                  }}
+                >
+                  {REACTION_EMOJIS.map((emoji) => {
+                    const active = post.viewerReactions?.includes(emoji);
+                    return (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => {
+                          setShowReactPicker(false);
+                          handleToggleReact(emoji);
+                        }}
+                        style={{
+                          width: '30px',
+                          height: '30px',
+                          borderRadius: '50%',
+                          border: active ? '1px solid rgba(29,185,84,0.5)' : '1px solid transparent',
+                          backgroundColor: active ? 'rgba(29,185,84,0.16)' : 'transparent',
+                          fontSize: '0.98rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {emoji}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Discord-style active reaction pills (only show count >= 1) */}
+            {REACTION_EMOJIS.filter(emoji => (post.reactionCounts?.[emoji] || 0) >= 1).map((emoji) => {
               const count = post.reactionCounts?.[emoji] || 0;
               const active = post.viewerReactions?.includes(emoji);
               return (
@@ -362,7 +481,7 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
                   onClick={() => handleToggleReact(emoji)}
                 >
                   <span>{emoji}</span>
-                  {count > 0 && <span className="react-count">{count}</span>}
+                  <span className="react-count">{count}</span>
                 </button>
               );
             })}

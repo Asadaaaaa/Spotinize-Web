@@ -211,12 +211,17 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
-    if (!username.trim()) {
+    const clean = username.trim();
+    if (!clean) {
       setErrorMsg(tx('Username is required', 'Username wajib diisi'));
       return;
     }
-    if (username.trim().length < 3) {
+    if (clean.length < 3) {
       setErrorMsg(tx('Username must be at least 3 characters', 'Username minimal 3 karakter'));
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(clean)) {
+      setErrorMsg(tx('Username can only contain letters, numbers, and underscores (_)', 'Username hanya boleh berisi huruf, angka, dan underscore (_)'));
       return;
     }
     if (!password || password.length < 4) {
@@ -226,7 +231,7 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
 
     try {
       setSubmitting(true);
-      await register(username.trim(), password, displayName.trim());
+      await register(clean, password, displayName.trim());
       setAuthModal(null);
       onStart();
     } catch (err) {
@@ -924,7 +929,7 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
                     className="input"
                     placeholder="john_doe"
                     value={username}
-                    onChange={e => setUsername(e.target.value)}
+                    onChange={e => setUsername(authModal === 'REGISTER' ? e.target.value.replace(/[^a-zA-Z0-9_]/g, '') : e.target.value)}
                     style={{ paddingLeft: '38px', fontSize: '0.95rem' }}
                     autoFocus
                     required

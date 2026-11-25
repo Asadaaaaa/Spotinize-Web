@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Navbar from './components/Navbar.jsx';
 import AppShell from './components/AppShell.jsx';
 import LandingPage from './pages/Landing/LandingPage.jsx';
@@ -9,10 +9,14 @@ import GamePage from './pages/Game/GamePage.jsx';
 import ProfilePage from './pages/Profile/ProfilePage.jsx';
 import FriendsPage from './pages/Friends/FriendsPage.jsx';
 import GlobalLeaderboardPage from './pages/Dashboard/GlobalLeaderboardPage.jsx';
+import StorePage from './pages/Store/StorePage.jsx';
 import NotificationDrawer from './components/NotificationDrawer.jsx';
 import NotificationToast from './components/NotificationToast.jsx';
 import PostComposerModal from './components/PostComposerModal.jsx';
 import SavedSongsModal from './components/SavedSongsModal.jsx';
+import DailyLoginModal from './components/DailyLoginModal.jsx';
+import QuestsModal from './components/QuestsModal.jsx';
+import SettingsModal from './components/SettingsModal.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
 import { useDialog } from './hooks/useDialog.jsx';
 import { useLanguage } from './hooks/useLanguage.jsx';
@@ -20,6 +24,9 @@ import { TrackDetailProvider } from './hooks/useTrackDetail.jsx';
 import { useVersionCheck } from './hooks/useVersionCheck.js';
 import ApiClient from './services/api.js';
 import socketService from './services/socket.js';
+import pushNotifications from './services/pushNotifications.js';
+import soundFx from './services/soundFx.js';
+import haptics from './services/haptics.js';
 
 const SPOTINIZE_SESSION_KEY = 'spotinize_active_session';
 
@@ -54,6 +61,9 @@ function getRouteFromLocation() {
   if (path === '/friends' || path === '/friends/') {
     return { tab: 'friends' };
   }
+  if (path === '/store' || path === '/store/') {
+    return { tab: 'store' };
+  }
   return { tab: 'landing' };
 }
 
@@ -67,6 +77,8 @@ function getPathForTab(tab) {
       return '/leaderboard';
     case 'friends':
       return '/friends';
+    case 'store':
+      return '/store';
     case 'landing':
     default:
       return '/';
@@ -115,7 +127,13 @@ export function App() {
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [composerInitialTrack, setComposerInitialTrack] = useState(null);
   const [isSavedSongsOpen, setIsSavedSongsOpen] = useState(false);
+  const [isDailyLoginOpen, setIsDailyLoginOpen] = useState(false);
+  const [isQuestsOpen, setIsQuestsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [canClaimDailyLogin, setCanClaimDailyLogin] = useState(false);
+  const [claimableQuestsCount, setClaimableQuestsCount] = useState(0);
   const [latestCreatedPost, setLatestCreatedPost] = useState(null);
+  const autoPromptedDailyUserRef = useRef(null);
 
   const currentUser = user || rawUser;
 
@@ -180,6 +198,8 @@ export function App() {
       path === '/leaderboard/' ||
       path === '/friends' ||
       path === '/friends/' ||
+      path === '/store' ||
+      path === '/store/' ||
       path.startsWith('/room/') ||
       path.startsWith('/game/');
 
@@ -203,15 +223,46 @@ export function App() {
     } catch (e) {}
   }, [currentUser?.id, isAuthChecking]);
 
+  const loadGamificationBadges = useCallback(async () => {
+    if (isAuthChecking || !currentUser?.id) return;
+    try {
+      const [dlRes, qRes] = await Promise.all([
+        ApiClient.get('/daily-login/status').catch(() => null),
+        ApiClient.get('/quests').catch(() => null)
+      ]);
+      setCanClaimDailyLogin(Boolean(dlRes?.canClaimToday));
+      const allQuests = [...(qRes?.daily || []), ...(qRes?.weekly || [])];
+      setClaimableQuestsCount(allQuests.filter(q => q.status === 'COMPLETED').length);
+    } catch (e) {}
+  }, [currentUser?.id, isAuthChecking]);
+
   useEffect(() => {
     if (isAuthChecking) return;
     loadNotifications();
-  }, [loadNotifications, isAuthChecking]);
+    loadGamificationBadges();
+  }, [loadNotifications, loadGamificationBadges, isAuthChecking]);
+
+  // Auto-open Daily Login popup on every visit or refresh when today's reward is unclaimed
+  useEffect(() => {
+    if (!currentUser?.id) {
+      autoPromptedDailyUserRef.current = null;
+      return;
+    }
+    if (isAuthChecking || !canClaimDailyLogin) return;
+    if (!publicProfileUsername && (currentTab === 'landing' || currentTab === 'game' || currentTab === 'room-lobby')) {
+      return;
+    }
+    if (autoPromptedDailyUserRef.current !== currentUser.id) {
+      autoPromptedDailyUserRef.current = currentUser.id;
+      setIsDailyLoginOpen(true);
+    }
+  }, [currentUser?.id, isAuthChecking, canClaimDailyLogin, currentTab, publicProfileUsername]);
 
   // Real-time Personal WebSocket Notifications & Invites (re-registers on reconnect)
   useEffect(() => {
     if (isAuthChecking || !currentUser?.id) return;
 
+    pushNotifications.registerWorker();
     const socket = socketService.getSocket();
 
     const handleConnect = () => {
@@ -225,10 +276,28 @@ export function App() {
     const handleInviteReceived = (inviteData) => {
       setActiveToastInvite(inviteData);
       loadNotifications();
+      soundFx.playNotif();
+      haptics.tap();
+      pushNotifications.show({
+        title: tx('Game Invite', 'Undangan Bermain'),
+        body: `${inviteData?.inviterUsername || 'Someone'} ${tx('invited you to play!', 'mengundangmu bermain!')}`,
+        tag: `invite-${inviteData?.roomId || Date.now()}`,
+        url: '/main'
+      });
     };
 
-    const handleNotificationNew = () => {
+    const handleNotificationNew = (notifData) => {
       loadNotifications();
+      soundFx.playNotif();
+      haptics.tap();
+      if (notifData?.title || notifData?.message || notifData?.body) {
+        pushNotifications.show({
+          title: notifData.title || 'Spotinize',
+          body: notifData.message || notifData.body || '',
+          tag: `notif-${notifData.id || Date.now()}`,
+          url: '/main'
+        });
+      }
     };
 
     socket.on('connect', handleConnect);
@@ -590,6 +659,10 @@ export function App() {
       );
     }
 
+    if (currentTab === 'store') {
+      return <StorePage />;
+    }
+
     return (
       <DashboardPage
         user={currentUser}
@@ -597,6 +670,7 @@ export function App() {
         onJoinRoom={handleJoinRoom}
         latestCreatedPost={latestCreatedPost}
         onOpenPublicProfile={handleNavigateToPublicProfile}
+        onOpenComposer={() => handleOpenComposer(null)}
       />
     );
   };
@@ -682,6 +756,10 @@ export function App() {
         <AppShell
           currentTab={activeNavTab}
           unreadCount={unreadCount}
+          canClaimDailyLogin={canClaimDailyLogin}
+          claimableQuestsCount={claimableQuestsCount}
+          onOpenDailyLogin={() => setIsDailyLoginOpen(true)}
+          onOpenQuests={() => setIsQuestsOpen(true)}
           onNavigate={handleNavigate}
           onOpenNotifications={() => {
             setIsNotificationOpen(true);
@@ -690,6 +768,7 @@ export function App() {
           onOpenComposer={() => handleOpenComposer(null)}
           onOpenSavedSongs={() => setIsSavedSongsOpen(true)}
           onOpenPublicProfile={handleNavigateToPublicProfile}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         >
           {renderContent()}
         </AppShell>
@@ -732,6 +811,15 @@ export function App() {
         onJoinRoom={(roomCode) => {
           handleJoinByRoomCode(roomCode);
         }}
+        onOpenPublicProfile={handleNavigateToPublicProfile}
+        onNavigate={handleNavigate}
+        onMarkReadLocal={(id) => {
+          setNotifications(prev =>
+            id === 'ALL'
+              ? prev.map(n => ({ ...n, isRead: true }))
+              : prev.map(n => (n.id === id ? { ...n, isRead: true } : n))
+          );
+        }}
         onRefresh={loadNotifications}
       />
 
@@ -756,6 +844,32 @@ export function App() {
         isOpen={isSavedSongsOpen}
         onClose={() => setIsSavedSongsOpen(false)}
         onPostTrack={(track) => handleOpenComposer(track)}
+      />
+
+      {/* Weekly AI Daily Login Modal */}
+      <DailyLoginModal
+        isOpen={isDailyLoginOpen}
+        onClose={() => setIsDailyLoginOpen(false)}
+        onClaimed={() => {
+          refreshUser?.();
+          loadGamificationBadges();
+        }}
+      />
+
+      {/* Daily & Weekly Quests Modal */}
+      <QuestsModal
+        isOpen={isQuestsOpen}
+        onClose={() => setIsQuestsOpen(false)}
+        onQuestClaimed={() => {
+          refreshUser?.();
+          loadGamificationBadges();
+        }}
+      />
+
+      {/* Settings Modal (Audio, SFX, Haptics, Push Notifications, Language) */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
       />
     </div>
     </TrackDetailProvider>

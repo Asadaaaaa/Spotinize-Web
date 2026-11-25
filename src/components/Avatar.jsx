@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User } from 'lucide-react';
+import { ProfileFrameWrapper } from './ProfileFrameAvatar.jsx';
 
 export function Avatar({
   src,
@@ -7,18 +8,23 @@ export function Avatar({
   size = 'md', // 'sm', 'md', 'lg'
   className = '',
   seed = 'user',
+  frame = null,
   style = {}
 }) {
   const [errorCount, setErrorCount] = useState(0);
 
   const sizeClass = size === 'lg' ? 'avatar-lg' : size === 'sm' ? 'avatar-sm' : '';
+  const pxSize = typeof style?.width === 'number'
+    ? style.width
+    : typeof style?.width === 'string' && style.width.endsWith('px')
+      ? parseInt(style.width, 10)
+      : (size === 'lg' ? 72 : size === 'sm' ? 32 : 42);
 
   const fallbackUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(seed || 'player')}`;
 
-  // If both src and fallback fail, render clean styled SVG placeholder
+  let avatarEl;
   if (errorCount >= 2 || (!src && errorCount >= 1)) {
-    const pxSize = size === 'lg' ? 72 : size === 'sm' ? 32 : 42;
-    return (
+    avatarEl = (
       <div
         className={`avatar ${sizeClass} ${className}`.trim()}
         style={{
@@ -36,20 +42,29 @@ export function Avatar({
         <User size={size === 'lg' ? 36 : size === 'sm' ? 16 : 22} />
       </div>
     );
+  } else {
+    const currentSrc = errorCount === 0 && src ? src : fallbackUrl;
+    avatarEl = (
+      <img
+        src={currentSrc}
+        alt={alt}
+        className={`avatar ${sizeClass} ${className}`.trim()}
+        onError={() => setErrorCount(prev => prev + 1)}
+        loading="lazy"
+        style={style}
+      />
+    );
   }
 
-  const currentSrc = errorCount === 0 && src ? src : fallbackUrl;
+  if (frame) {
+    return (
+      <ProfileFrameWrapper frame={frame} sizePx={pxSize}>
+        {avatarEl}
+      </ProfileFrameWrapper>
+    );
+  }
 
-  return (
-    <img
-      src={currentSrc}
-      alt={alt}
-      className={`avatar ${sizeClass} ${className}`.trim()}
-      onError={() => setErrorCount(prev => prev + 1)}
-      loading="lazy"
-      style={style}
-    />
-  );
+  return avatarEl;
 }
 
 export default Avatar;

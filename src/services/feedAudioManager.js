@@ -84,9 +84,9 @@ class FeedAudioManager {
 
   /**
    * Toggle play/pause for a given track key + url.
-   * Supports direct previewUrl OR internal /api/audio/clue/:trackId?duration=10 fallback.
+   * Supports direct previewUrl, internal /api/audio/clue/:trackId, or /api/spotify/track-detail lookup.
    */
-  async toggle({ key, previewUrl, trackId, duration = 10 }) {
+  async toggle({ key, previewUrl, trackId, title, artist, spotifyId, duration = 10 }) {
     if (!key) return;
 
     // Clicking the currently playing track pauses/stops it
@@ -95,14 +95,41 @@ class FeedAudioManager {
       return;
     }
 
-    const src = previewUrl || (trackId ? `/api/audio/clue/${encodeURIComponent(trackId)}?duration=${duration}` : null);
+    let src = previewUrl || (trackId ? `/api/audio/clue/${encodeURIComponent(trackId)}?duration=${duration}` : null);
+
+    if (!src && (title || spotifyId)) {
+      this.stop();
+      this.currentKey = key;
+      this.isLoading = true;
+      this.isPlaying = false;
+      this._emit();
+      try {
+        const params = new URLSearchParams();
+        if (spotifyId) params.set('spotifyId', spotifyId);
+        if (title) params.set('title', title);
+        if (artist) params.set('artist', artist);
+        const resp = await fetch(`/api/spotify/track-detail?${params.toString()}`);
+        const json = await resp.json().catch(() => null);
+        if (this.currentKey !== key) return;
+        src = json?.track?.previewUrl || null;
+      } catch (_) {
+        src = null;
+      }
+      if (!src) {
+        this.stop();
+        return;
+      }
+    }
+
     if (!src) return;
 
-    this.stop();
-    this.currentKey = key;
-    this.isLoading = true;
-    this.isPlaying = false;
-    this._emit();
+    if (this.currentKey !== key) {
+      this.stop();
+      this.currentKey = key;
+      this.isLoading = true;
+      this.isPlaying = false;
+      this._emit();
+    }
 
     const audio = new Audio(src);
     audio.preload = 'auto';

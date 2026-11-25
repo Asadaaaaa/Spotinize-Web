@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, SkipForward, Clock, Music, Loader2, ArrowLeft, CheckCircle2, Users, LogOut, ArrowRight } from 'lucide-react';
+import { Search, SkipForward, Clock, Music, Loader2, ArrowLeft, CheckCircle2, Users, LogOut, ArrowRight, Heart, Zap, Skull, Bell } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import AudioCluePlayer from '../../components/AudioCluePlayer.jsx';
@@ -8,7 +8,7 @@ import LiveLeaderboard from '../../components/LiveLeaderboard.jsx';
 import PreparingGameModal from '../../components/PreparingGameModal.jsx';
 import RoundResultModal from '../Result/RoundResultModal.jsx';
 import FinalResultPage from '../Result/FinalResultPage.jsx';
-import VinylArt from '../../components/VinylArt.jsx';
+import { VinylDiscStage } from '../../components/VinylArt.jsx';
 import { getSpotifyTrackUrl, SpotifyIcon } from '../../utils/spotifyLink.jsx';
 import useGame from '../../hooks/useGame.js';
 import { useLanguage } from '../../hooks/useLanguage.jsx';
@@ -35,6 +35,9 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
     isRoundResultOpen,
     revealedTrack,
     isWaitingForOthers,
+    speedBuzzState,
+    emitSpeedBuzz,
+    submitSpeedBuzzGuess,
     playClue,
     revealNext,
     submitGuess,
@@ -98,6 +101,13 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
   }
 
   const isMultiplayer = gameState?.mode === 'MULTIPLAYER';
+  const isSpeedBuzz = gameState?.gameSubtype === 'SPEED_BUZZ';
+  const isSurvival = gameState?.gameSubtype === 'SURVIVAL';
+  const isEliminated = Boolean(gameState?.player?.isEliminated);
+  const myLives = gameState?.player?.lives ?? 3;
+  const isBuzzLockedByOther = Boolean(speedBuzzState?.activeBuzzUserId && speedBuzzState.activeBuzzUserId !== user?.id);
+  const isMyBuzzActive = Boolean(speedBuzzState?.activeBuzzUserId === user?.id);
+  const isBuzzCooldown = Boolean(speedBuzzState?.lockoutUntil && new Date(speedBuzzState.lockoutUntil) > new Date());
 
   // Dedicated waiting view for fastest player who finished all rounds in Multiplayer
   if (isWaitingForOthers && !isRoundResultOpen) {
@@ -240,11 +250,18 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
             {/* Round info */}
             <div>
               <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-dim)', textTransform: 'uppercase', display: 'block' }}>
-                {tCategory(gameState?.category)}
+                {tCategory(gameState?.category)} {gameState?.gameSubtype && gameState.gameSubtype !== 'CLASSIC' ? `· ${gameState.gameSubtype}` : ''}
               </span>
               <span style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--color-text-bright)' }}>
                 ROUND {gameState?.currentRound} / {gameState?.numberOfSongs}
               </span>
+              {isSurvival && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px' }}>
+                  {[1, 2, 3].map(h => (
+                    <Heart key={h} size={13} color={h <= myLives ? '#fb7185' : '#3f3f46'} fill={h <= myLives ? '#fb7185' : 'none'} />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Thinking Timer ticker (Section 31) */}
@@ -307,6 +324,56 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
             </div>
           </div>
 
+          {/* Eliminated Spectator Banner (Survival / Elimination) */}
+          {isEliminated && (
+            <div style={{
+              backgroundColor: 'rgba(244, 63, 94, 0.14)',
+              border: '1px solid #fb7185',
+              color: '#fda4af',
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              textAlign: 'center',
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}>
+              <Skull size={18} />
+              <span>{tx('Eliminated! You are now spectating until the match ends.', 'Kamu tereliminasi! Mode Spectator aktif hingga game selesai.')}</span>
+            </div>
+          )}
+
+          {/* Speed Buzz Countdown / Status Banner */}
+          {isSpeedBuzz && (
+            <div style={{
+              backgroundColor: '#14141d',
+              border: '1px solid rgba(56, 189, 248, 0.45)',
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              textAlign: 'center',
+              fontWeight: 800
+            }}>
+              {speedBuzzState?.countdown > 0 ? (
+                <span style={{ color: '#facc15', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Clock size={14} /> {tx('Starting synchronized round...', 'Memulai ronde serentak...')}
+                </span>
+              ) : speedBuzzState?.roundWinner ? (
+                <span style={{ color: 'var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Zap size={14} /> {speedBuzzState.roundWinner.displayName} +{speedBuzzState.roundWinner.pointsAwarded} PTS!
+                </span>
+              ) : speedBuzzState?.activeBuzzUserId ? (
+                <span style={{ color: '#38bdf8', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Bell size={14} /> {speedBuzzState.activeBuzzName} {tx('buzzed in!', 'menekan BUZZ!')}
+                </span>
+              ) : (
+                <span style={{ color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Zap size={14} /> Speed Buzz · Auto-reveal {revealLevel}s
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Feedback Message Banner (if wrong or error) */}
           {feedbackMessage && (
             <div style={{
@@ -335,22 +402,16 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
               gap: '22px'
             }}
           >
-            {/* Vinyl Disc: empty while THINKING, fades in artwork when GUESSED */}
-            <div className={`track-vinyl-disc ${isPlayingAudio ? 'spinning' : ''}`}>
-              {roundStatus === 'GUESSED' && revealedTrack ? (
-                <VinylArt
-                  src={revealedTrack.albumArt || revealedTrack.coverUrl}
-                  alt={revealedTrack.title}
-                  size={98}
-                  borderRadius="50%"
-                  className="vinyl-art-fade-in"
-                  style={{ border: '2px solid rgba(255,255,255,0.16)', animation: 'vinylFadeIn 0.6s ease forwards' }}
-                />
-              ) : (
-                <Music size={34} color="var(--color-text-dim)" style={{ opacity: 0.45 }} />
-              )}
-              <span className="track-vinyl-spindle" />
-            </div>
+            {/* Vinyl Disc: applies equipped vinyl skin both while THINKING and when GUESSED */}
+            <VinylDiscStage
+              skin={user?.equippedVinyl}
+              spinning={isPlayingAudio}
+              showArtwork={roundStatus === 'GUESSED' && Boolean(revealedTrack)}
+              coverSrc={revealedTrack?.albumArt || revealedTrack?.coverUrl}
+              coverAlt={revealedTrack?.title}
+              fadeIn
+              placeholderIcon={<Music size={34} color="var(--color-text-dim)" style={{ opacity: 0.45 }} />}
+            />
 
             {roundStatus === 'GUESSED' && revealedTrack ? (
               <div style={{ width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
@@ -416,13 +477,47 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
                 {revealedTrack.artist}
               </div>
             </div>
+          ) : isSpeedBuzz ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {isMyBuzzActive ? (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  onClick={() => setIsSearchModalOpen(true)}
+                  icon={<Search size={20} fill="#000" />}
+                  style={{ height: '56px', fontSize: '1.15rem' }}
+                >
+                  {tx('Answer Now!', 'Pilih Jawaban Sekarang!')}
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  disabled={isBuzzLockedByOther || isBuzzCooldown || roundStatus !== 'THINKING'}
+                  onClick={() => {
+                    emitSpeedBuzz();
+                    setIsSearchModalOpen(true);
+                  }}
+                  icon={<Zap size={20} fill="#000" />}
+                  style={{ height: '58px', fontSize: '1.2rem', fontWeight: 900 }}
+                >
+                  {isBuzzCooldown
+                    ? tx('Locked Out (3s)...', 'Terkunci (3s)...')
+                    : isBuzzLockedByOther
+                      ? `${speedBuzzState.activeBuzzName} Answering...`
+                      : 'BUZZ!'}
+                </Button>
+              )}
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <Button
                 variant="primary"
                 size="lg"
                 fullWidth
-                disabled={roundStatus !== 'THINKING' || remainingAttempts <= 0}
+                disabled={isEliminated || roundStatus !== 'THINKING' || remainingAttempts <= 0}
                 onClick={() => setIsSearchModalOpen(true)}
                 icon={<Search size={20} fill="#000" />}
                 style={{ height: '56px', fontSize: '1.15rem' }}
@@ -434,7 +529,7 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  disabled={roundStatus !== 'THINKING'}
+                  disabled={isEliminated || roundStatus !== 'THINKING'}
                   onClick={skipRound}
                   icon={<SkipForward size={16} />}
                   style={{ color: 'var(--color-text-dim)' }}
@@ -457,6 +552,8 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
             <LiveLeaderboard
               leaderboard={gameState.leaderboard}
               currentUserId={user?.id}
+              gameSubtype={gameState?.gameSubtype || 'CLASSIC'}
+              teamStandings={gameState?.teamStandings || null}
             />
           </div>
         )}
@@ -467,7 +564,14 @@ export function GamePage({ gameId, user, onExitToDashboard, onGameFinished }) {
         isOpen={isSearchModalOpen}
         onClose={() => setIsSearchModalOpen(false)}
         remainingAttempts={remainingAttempts}
-        onSelectSong={submitGuess}
+        onSelectSong={(track) => {
+          if (isSpeedBuzz) {
+            submitSpeedBuzzGuess(track);
+            setIsSearchModalOpen(false);
+          } else {
+            submitGuess(track);
+          }
+        }}
       />
 
       {/* Round Result Modal (Between rounds) */}

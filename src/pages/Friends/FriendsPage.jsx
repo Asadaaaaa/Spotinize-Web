@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, UserPlus, Play, Search, UserCheck, Trophy,
-  Loader2, Check, AlertCircle, Flame, HeartHandshake, UserMinus, CheckCircle2
+  Check, AlertCircle, Flame, HeartHandshake, UserMinus, CheckCircle2
 } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import Avatar from '../../components/Avatar.jsx';
+import { FriendsSkeleton } from '../../components/Skeletons.jsx';
 import ApiClient from '../../services/api.js';
 import socketService from '../../services/socket.js';
 import { useLanguage } from '../../hooks/useLanguage.jsx';
@@ -249,9 +250,7 @@ export function FriendsPage({ user, onStartMultiplayerWithFriend, onOpenPublicPr
 
         {isSearching ? (
           searching ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--color-text-dim)' }}>
-              <Loader2 size={22} className="spin" style={{ margin: '0 auto', color: 'var(--color-primary)' }} />
-            </div>
+            <FriendsSkeleton count={3} />
           ) : searchResults.length === 0 ? (
             <Card style={{ textAlign: 'center', padding: '28px 16px', color: 'var(--color-text-dim)' }}>
               {tx(`No players found for "${searchQuery}".`, `Pemain "${searchQuery}" tidak ditemukan.`)}
@@ -292,9 +291,7 @@ export function FriendsPage({ user, onStartMultiplayerWithFriend, onOpenPublicPr
             </div>
 
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--color-text-dim)' }}>
-                <Loader2 size={24} className="spin" style={{ margin: '0 auto', color: 'var(--color-primary)' }} />
-              </div>
+              <FriendsSkeleton count={5} />
             ) : activeList.length === 0 ? (
               <Card style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--color-text-dim)' }}>
                 <Users size={30} style={{ margin: '0 auto 10px', opacity: 0.4 }} />

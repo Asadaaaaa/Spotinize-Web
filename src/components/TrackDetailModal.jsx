@@ -3,11 +3,13 @@ import { X, Play, Square, Loader2, Disc3, Calendar, User, Music2, FileText, Exte
 import ApiClient from '../services/api.js';
 import feedAudioManager from '../services/feedAudioManager.js';
 import { getSpotifyTrackUrl, SpotifyIcon } from '../utils/spotifyLink.jsx';
-import VinylArt from './VinylArt.jsx';
+import { VinylDiscStage } from './VinylArt.jsx';
 import { TrackDetailSkeleton } from './Skeletons.jsx';
+import { useAuth } from '../hooks/useAuth.jsx';
 import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function TrackDetailModal({ track, onClose }) {
+  const { user } = useAuth();
   const { lang, tx } = useLanguage();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -89,16 +91,13 @@ export function TrackDetailModal({ track, onClose }) {
         <div className="track-detail-layout">
           {/* Left: Vinyl Disc + Visualization Bars + Icon-only Play & Spotify */}
           <div className="track-detail-left">
-            <div className={`track-vinyl-disc ${isPlaying && audioState.isPlaying ? 'spinning' : ''}`}>
-              <VinylArt
-                src={displayCover}
-                alt={displayTitle}
-                size={98}
-                borderRadius="50%"
-                style={{ border: '2px solid rgba(255,255,255,0.16)' }}
-              />
-              <span className="track-vinyl-spindle" />
-            </div>
+            <VinylDiscStage
+              skin={user?.equippedVinyl}
+              spinning={isPlaying && audioState.isPlaying}
+              showArtwork={Boolean(displayCover)}
+              coverSrc={displayCover}
+              coverAlt={displayTitle}
+            />
 
             {/* Visualization Bars */}
             <div className={`track-viz-bars ${isPlaying && audioState.isPlaying ? 'active' : ''}`} aria-hidden="true">

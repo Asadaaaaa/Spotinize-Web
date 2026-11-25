@@ -511,17 +511,26 @@
   }
 
   .friend-tabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     gap: 6px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .friend-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .friend-tab-btn {
-    width: 100%;
+    flex: 0 0 auto;
+    width: auto;
     min-width: 0;
-    padding: 9px 6px;
+    white-space: nowrap;
+    padding: 7px 11px;
     font-size: 0.76rem;
-    gap: 4px;
+    gap: 5px;
   }
 
   .friend-tab-label-desktop {
@@ -587,13 +596,58 @@
   }
 }
 
-@media (max-width: 380px) {
-  .friend-tab-btn {
-    font-size: 0.72rem;
-    padding: 8px 4px;
+@media (max-width: 640px) {
+  .daily-login-modal {
+    max-width: 356px !important;
+    width: calc(100% - 24px) !important;
+    padding: 14px !important;
+    border-radius: 16px !important;
+    max-height: 84vh !important;
   }
 
-  .friend-tab-btn svg {
+  .daily-login-title {
+    font-size: 1.05rem !important;
+  }
+
+  .daily-login-sub {
+    font-size: 0.72rem !important;
+  }
+
+  .daily-login-grid {
+    gap: 6px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .daily-login-day-card {
+    padding: 8px 6px !important;
+    min-height: 86px !important;
+    gap: 5px !important;
+    border-radius: 11px !important;
+  }
+
+  .daily-login-sublabel {
+    display: none !important;
+  }
+
+  .daily-login-day7-card {
+    padding: 10px 12px !important;
+    gap: 10px !important;
+    margin-bottom: 12px !important;
+    border-radius: 12px !important;
+  }
+}
+
+@media (max-width: 440px) {
+  .mobile-hide-xs {
+    display: none;
+  }
+
+  .mobile-user-chip {
+    padding: 3px 6px 3px 4px;
+    gap: 4px;
+  }
+
+  .mobile-user-chip-name {
     display: none;
   }
 }
@@ -808,7 +862,7 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 225px;
+  width: 248px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -870,12 +924,47 @@
 .app-shell-right-inner {
   position: sticky;
   top: 0;
-  padding: 20px 0 24px;
+  height: 100vh;
+  padding: 20px 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.app-shell-right-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-height: 100vh;
-  overflow-y: auto;
+}
+
+.sidebar-wallet-floating {
+  margin-top: auto;
+  align-self: center;
+  flex-shrink: 0;
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  background-color: #121218;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.48);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #e5e7eb;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.sidebar-wallet-floating:hover {
+  background-color: #171720;
+  border-color: var(--color-primary);
 }
 
 .right-widget-card {
@@ -1301,6 +1390,17 @@
 
 /* Mobile Breakpoint (< 768px: Single Column + Top Compact Header + Bottom Nav + FAB) */
 @media (max-width: 768px) {
+  .profile-share-label {
+    display: none;
+  }
+
+  .profile-share-corner {
+    width: 30px;
+    height: 30px;
+    padding: 0 !important;
+    justify-content: center;
+  }
+
   .app-shell-grid {
     display: block;
     padding: 0 14px;
@@ -1357,17 +1457,18 @@
     bottom: 14px;
     left: 50%;
     transform: translateX(-50%);
-    width: calc(100% - 28px);
-    max-width: 420px;
+    width: calc(100% - 24px);
+    max-width: 440px;
     height: 58px;
-    background-color: rgba(18, 18, 22, 0.9);
+    background-color: rgba(18, 18, 22, 0.92);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 36px;
     align-items: center;
     justify-content: space-around;
-    padding: 0 8px;
+    padding: 0 6px;
+    gap: 2px;
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
     z-index: 999;
   }
@@ -1379,9 +1480,11 @@
     justify-content: center;
     gap: 2px;
     flex: 1;
+    min-width: 0;
     height: 44px;
+    padding: 0 2px;
     color: var(--color-text-muted);
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     font-weight: 700;
     background: transparent;
     border: none;

@@ -2,13 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Trophy, Flame, Zap, Award, Share2, History,
   Edit3, Music, User, ArrowLeft, Play, Square,
-  Loader2, UserPlus, UserCheck, MessageSquare, Bookmark, Disc3, ExternalLink
+  Loader2, UserPlus, UserCheck, MessageSquare, Bookmark, Disc3, ExternalLink, Swords,
+  Package, Check, Target, Crown
 } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import ShareInstagramModal from '../../components/ShareInstagramModal.jsx';
 import EditProfileModal from '../../components/EditProfileModal.jsx';
 import FeedPostCard from '../../components/FeedPostCard.jsx';
+import { RankedTierBadge } from '../../components/ItemRarityBadge.jsx';
 import ApiClient from '../../services/api.js';
 import socketService from '../../services/socket.js';
 import feedAudioManager from '../../services/feedAudioManager.js';
@@ -28,7 +30,7 @@ export function ProfilePage({
   onPlayChallenge,
   onBack
 }) {
-  const { updateUser } = useAuth();
+  const { updateUser, refreshUser } = useAuth();
   const { showAlert } = useDialog();
   const { tx, tCategory } = useLanguage();
   const { openTrackDetail } = useTrackDetail();
@@ -41,9 +43,16 @@ export function ProfilePage({
   const [followCounts, setFollowCounts] = useState({ followersCount: 0, followingCount: 0 });
   const [tasteCompatibility, setTasteCompatibility] = useState(null);
   const [spotifyShowcase, setSpotifyShowcase] = useState(null);
+  const [rankedSummary, setRankedSummary] = useState(null);
+  const [lockerItems, setLockerItems] = useState([]);
+  const [lockerFilter, setLockerFilter] = useState('ALL');
+  const [equipBusyId, setEquipBusyId] = useState(null);
+  const [savingSongKey, setSavingSongKey] = useState(null);
+  const [headToHead, setHeadToHead] = useState(null);
+  const [creatingDuel, setCreatingDuel] = useState(false);
   const [savedTracks, setSavedTracks] = useState([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
-  const [activeTab, setActiveTab] = useState('posts'); // 'posts' | 'history' | 'saved' | 'spotify'
+  const [activeTab, setActiveTab] = useState('posts'); // 'posts' | 'achievements' | 'locker' | 'saved' | 'history' | 'spotify'
   const [spotifyBusy, setSpotifyBusy] = useState(false);
 
   const [showShareModal, setShowShareModal] = useState(false);
@@ -95,7 +104,15 @@ export function ProfilePage({
             });
             setTasteCompatibility(res.tasteCompatibility || null);
             setSpotifyShowcase(res.spotifyShowcase || null);
+            setRankedSummary(res.rankedSummary || null);
+            setLockerItems(res.locker || []);
+            setHeadToHead(res.headToHead || null);
             loadUserPosts(res.user.id);
+            if (authUser?.id) {
+              ApiClient.get('/saved-tracks').then(sRes => {
+                if (sRes?.tracks) setSavedTracks(sRes.tracks);
+              }).catch(() => {});
+            }
           } else {
             setError(tx('Player not found', 'Pemain tidak ditemukan'));
           }
@@ -120,6 +137,9 @@ export function ProfilePage({
           });
           setTasteCompatibility(null);
           setSpotifyShowcase(pRes.spotifyShowcase || null);
+          setRankedSummary(pRes.rankedSummary || null);
+          setLockerItems(pRes.locker || []);
+          setHeadToHead(null);
           loadUserPosts(pRes.user.id);
         }
         if (hRes.histories) setHistories(hRes.histories);
@@ -215,6 +235,65 @@ export function ProfilePage({
     if (updatedUser?.id) loadUserPosts(updatedUser.id);
   };
 
+  const isSongSaved = (song) => {
+    const sid = song?.spotifyId ? String(song.spotifyId).trim() : null;
+    const tLower = (song?.title || '').trim().toLowerCase();
+    const aLower = (song?.artist || '').trim().toLowerCase();
+    return savedTracks.some(t =>
+      (sid && t.spotifyId && String(t.spotifyId).trim() === sid) ||
+      ((t.title || '').trim().toLowerCase() === tLower && (t.artist || '').trim().toLowerCase() === aLower)
+    );
+  };
+
+  const handleToggleSaveSong = async (e, song) => {
+    e.stopPropagation();
+    if (!authUser?.id || savingSongKey) return;
+    const key = song.spotifyId || `${song.title}:${song.artist}`;
+    try {
+      setSavingSongKey(key);
+      await ApiClient.post('/saved-tracks/toggle', { track: song });
+      const sRes = await ApiClient.get('/saved-tracks').catch(() => null);
+      if (sRes?.tracks) setSavedTracks(sRes.tracks);
+    } catch (_) {
+    } finally {
+      setSavingSongKey(null);
+    }
+  };
+
+  const handleToggleEquip = async (item) => {
+    if (!isSelf || equipBusyId) return;
+    try {
+      setEquipBusyId(item.id);
+      if (item.isEquipped) {
+        await ApiClient.post('/store/unequip', { type: item.type });
+      } else {
+        await ApiClient.post('/store/equip', { itemId: item.id });
+      }
+      const [invRes] = await Promise.all([
+        ApiClient.get('/store/inventory'),
+        refreshUser?.()
+      ]);
+      const nextItems = invRes?.items || [];
+      setLockerItems(nextItems);
+      setProfileData(prev => {
+        if (!prev) return prev;
+        const nextFrame = nextItems.find(i => i.type === 'FRAME' && i.isEquipped) || null;
+        const nextVinyl = nextItems.find(i => i.type === 'VINYL' && i.isEquipped) || null;
+        const nextTitle = nextItems.find(i => i.type === 'TITLE' && i.isEquipped) || null;
+        return {
+          ...prev,
+          equippedFrame: nextFrame,
+          equippedVinyl: nextVinyl,
+          equippedTitle: nextTitle
+        };
+      });
+    } catch (err) {
+      showAlert(err.message || tx('Failed to update item', 'Gagal mengubah item'), tx('Failed', 'Gagal'));
+    } finally {
+      setEquipBusyId(null);
+    }
+  };
+
   if (loading) {
     return <ProfileSkeleton />;
   }
@@ -256,17 +335,17 @@ export function ProfilePage({
           size="sm"
           className="profile-share-corner"
           onClick={() => setShowShareModal(true)}
-          icon={<Share2 size={12} />}
+          icon={<Share2 size={13} />}
           style={{ padding: '4px 10px', fontSize: '0.72rem', height: '28px' }}
         >
-          Share Story
+          <span className="profile-share-label">Share Story</span>
         </Button>
 
         <div className="profile-unified-grid">
           {/* LEFT COLUMN: Larger Photo + Tilted Tag -> Name + @username side-by-side -> Clean Bio -> Action */}
           <div className="profile-left-col">
             <div
-              style={{ position: 'relative', cursor: isSelf ? 'pointer' : 'default', marginTop: '6px', marginBottom: '4px' }}
+              style={{ position: 'relative', display: 'inline-block', cursor: isSelf ? 'pointer' : 'default', marginTop: '10px', marginBottom: '8px' }}
               onClick={() => isSelf && setShowEditModal(true)}
               title={isSelf ? tx('Click to edit profile', 'Klik untuk edit profil') : ''}
             >
@@ -275,6 +354,7 @@ export function ProfilePage({
                 alt={profileData.displayName}
                 size="lg"
                 seed={profileData.id || profileData.displayName}
+                frame={profileData.equippedFrame}
                 style={{
                   width: '108px',
                   height: '108px',
@@ -282,21 +362,95 @@ export function ProfilePage({
                   boxShadow: '0 6px 16px rgba(0,0,0,0.45)'
                 }}
               />
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  left: '-14px',
+                  transform: 'rotate(-10deg)',
+                  zIndex: 4,
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap',
+                  backgroundColor: '#18181f',
+                  border: '1.5px solid rgba(192, 132, 252, 0.55)',
+                  color: '#f3f4f6',
+                  padding: '3px 9px',
+                  borderRadius: '999px',
+                  fontSize: '0.7rem',
+                  fontWeight: 900,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.55)'
+                }}
+              >
+                Lv.{profileData.level || 1}
+              </span>
+              {profileData.currentStreak > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-38px',
+                    transform: 'rotate(8deg)',
+                    zIndex: 4,
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    backgroundColor: '#1b1610',
+                    border: '1.5px solid rgba(255, 164, 43, 0.6)',
+                    color: 'var(--color-warning)',
+                    padding: '3px 9px',
+                    borderRadius: '999px',
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.55)'
+                  }}
+                >
+                  <Flame size={11} /> {profileData.currentStreak} Streak
+                </span>
+              )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <h2 style={{ fontSize: '1.15rem', fontWeight: 900, margin: 0 }}>
                 {profileData.displayName}
               </h2>
               <span style={{ fontSize: '0.78rem', color: 'var(--color-text-dim)', fontWeight: 600 }}>
                 @{profileData.username}
               </span>
-              {profileData.currentStreak > 0 && (
-                <span className="streak-pill-mini">
-                  <Flame size={10} /> {profileData.currentStreak}
+            </div>
+
+            {/* Active Title & Ranked Tier */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              {profileData.equippedTitle && (
+                <span style={{
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  padding: '2px 9px',
+                  borderRadius: '999px',
+                  color: profileData.equippedTitle.visualConfig?.color || '#facc15',
+                  backgroundColor: profileData.equippedTitle.visualConfig?.bgColor || 'rgba(250,204,21,0.14)'
+                }}>
+                  {profileData.equippedTitle.name}
                 </span>
               )}
+              {rankedSummary && rankedSummary.tier !== 'UNRANKED' && (
+                <RankedTierBadge tier={rankedSummary.tier} rp={rankedSummary.rp} compact />
+              )}
             </div>
+
+            {/* Level XP Bar */}
+            {profileData.levelState && (
+              <div style={{ width: '100%', maxWidth: '210px', margin: '0 auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.66rem', color: 'var(--color-text-dim)', marginBottom: '3px' }}>
+                  <span>XP Level {profileData.level || 1}</span>
+                  <span>{profileData.levelState.currentLevelXp}/{profileData.levelState.nextLevelXp}</span>
+                </div>
+                <div style={{ height: '5px', borderRadius: '999px', backgroundColor: '#0e0e13', overflow: 'hidden' }}>
+                  <div style={{ width: `${profileData.levelState.progressPercent || 0}%`, height: '100%', backgroundColor: '#c084fc' }} />
+                </div>
+              </div>
+            )}
 
             {profileData.bio && (
               <p style={{
@@ -318,8 +472,8 @@ export function ProfilePage({
               {!isSelf && tasteCompatibility && (
                 <>
                   <span>·</span>
-                  <span style={{ color: 'var(--color-primary)', fontWeight: 800 }}>
-                    🎧 {tasteCompatibility.score}% {tx('Taste Match', 'Kecocokan')}
+                  <span style={{ color: 'var(--color-primary)', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Disc3 size={12} /> {tasteCompatibility.score}% {tx('Taste Match', 'Kecocokan')}
                   </span>
                 </>
               )}
@@ -327,29 +481,15 @@ export function ProfilePage({
 
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'nowrap', justifyContent: 'center', marginTop: '4px', width: '100%' }}>
               {isSelf && (
-                <>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => setShowEditModal(true)}
-                    icon={<Edit3 size={12} />}
-                    style={{ fontWeight: 800, padding: '6px 10px', fontSize: '0.73rem', whiteSpace: 'nowrap' }}
-                  >
-                    {tx('Edit Profile', 'Edit Profil')}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={spotifyBusy}
-                    onClick={profileData.spotifyConnected ? handleDisconnectSpotify : handleConnectSpotify}
-                    icon={<Disc3 size={12} color={profileData.spotifyConnected ? 'var(--color-primary)' : 'currentColor'} />}
-                    style={{ padding: '6px 10px', fontSize: '0.73rem', whiteSpace: 'nowrap' }}
-                  >
-                    {profileData.spotifyConnected
-                      ? tx('Spotify ✓', 'Spotify ✓')
-                      : tx('Connect Spotify', 'Connect Spotify')}
-                  </Button>
-                </>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowEditModal(true)}
+                  icon={<Edit3 size={12} />}
+                  style={{ fontWeight: 800, padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                >
+                  {tx('Edit Profile', 'Edit Profil')}
+                </Button>
               )}
 
               {!isSelf && authUser?.id && (
@@ -376,6 +516,28 @@ export function ProfilePage({
                   style={{ padding: '6px 12px', fontSize: '0.78rem' }}
                 >
                   {tx('Duel', 'Duel')}
+                </Button>
+              )}
+              {!isSelf && authUser?.id && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={creatingDuel}
+                  onClick={async () => {
+                    try {
+                      setCreatingDuel(true);
+                      const res = await ApiClient.post('/ranked/duel/create', { opponentId: profileData.id });
+                      if (res?.gameState && onPlayChallenge) onPlayChallenge(res.gameState);
+                    } catch (err) {
+                      showAlert?.(err.message);
+                    } finally {
+                      setCreatingDuel(false);
+                    }
+                  }}
+                  icon={<Swords size={13} color="#38bdf8" />}
+                  style={{ padding: '6px 11px', fontSize: '0.75rem' }}
+                >
+                  {creatingDuel ? '...' : tx('Ranked Duel', 'Tantang Ranked')}
                 </Button>
               )}
             </div>
@@ -439,7 +601,7 @@ export function ProfilePage({
                         spotifyId: song.spotifyId
                       })}
                     >
-                      <VinylArt src={song.coverUrl} alt={song.title} size={34} />
+                      <VinylArt src={song.coverUrl} alt={song.title} size={34} skin={profileData.equippedVinyl} />
                       <div style={{ minWidth: 0, flex: 1 }}>
                         {idx === 0 && (
                           <div style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--color-text-dim)', textTransform: 'uppercase' }}>
@@ -454,23 +616,50 @@ export function ProfilePage({
                         </div>
                       </div>
 
-                      {song.previewUrl && (
-                        <button
-                          type="button"
-                          className={`trend-play-btn ${isSongPlaying ? 'active' : ''}`}
-                          style={{ width: '26px', height: '26px' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            feedAudioManager.toggle({
-                              key: songAudioKey,
-                              previewUrl: song.previewUrl
-                            });
-                          }}
-                          title="Preview"
-                        >
-                          {isSongPlaying && audioState.isPlaying ? <Square size={9} fill="currentColor" /> : <Play size={10} fill="currentColor" />}
-                        </button>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+                        {(song.previewUrl || song.title || song.spotifyId) && (
+                          <button
+                            type="button"
+                            className={`trend-play-btn ${isSongPlaying ? 'active' : ''}`}
+                            style={{ width: '28px', height: '28px' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              feedAudioManager.toggle({
+                                key: songAudioKey,
+                                previewUrl: song.previewUrl,
+                                title: song.title,
+                                artist: song.artist,
+                                spotifyId: song.spotifyId
+                              });
+                            }}
+                            title={isSongPlaying ? 'Stop' : 'Preview'}
+                          >
+                            {isSongPlaying && audioState.isLoading ? (
+                              <Loader2 size={11} className="spin" />
+                            ) : isSongPlaying && audioState.isPlaying ? (
+                              <Square size={9} fill="currentColor" />
+                            ) : (
+                              <Play size={11} fill="currentColor" />
+                            )}
+                          </button>
+                        )}
+                        {authUser?.id && (() => {
+                          const saved = isSongSaved(song);
+                          const songKey = song.spotifyId || `${song.title}:${song.artist}`;
+                          return (
+                            <button
+                              type="button"
+                              className={`bookmark-icon-btn ${saved ? 'saved' : ''}`}
+                              style={{ width: '28px', height: '28px' }}
+                              disabled={savingSongKey === songKey}
+                              onClick={(e) => handleToggleSaveSong(e, song)}
+                              title={saved ? tx('Remove bookmark', 'Hapus simpanan') : tx('Save song', 'Simpan lagu')}
+                            >
+                              <Bookmark size={13} fill={saved ? 'currentColor' : 'none'} />
+                            </button>
+                          );
+                        })()}
+                      </div>
                     </div>
                   );
                 })}
@@ -500,7 +689,7 @@ export function ProfilePage({
               </button>
             ) : null}
 
-            {/* Scattered Tilted Favorite Category & Auto-Badges below Favorite Song */}
+            {/* Favorite Category below Favorite Song */}
             <div className="profile-scattered-badges">
               <span
                 className="profile-scattered-badge"
@@ -510,21 +699,34 @@ export function ProfilePage({
                   color: 'var(--color-primary)'
                 }}
               >
-                <span>🎵</span>
+                <Music size={11} />
                 <span>{tCategory(profileData.favoriteCategory || 'Global Trends')}</span>
               </span>
-              {badges.map(b => (
-                <span key={b.id} className="profile-scattered-badge">
-                  <span>{b.icon}</span>
-                  <span>{b.label}</span>
-                </span>
-              ))}
             </div>
           </div>
         </div>
       </Card>
 
-      {/* 2. TABS BELOW: POST & HISTORY */}
+      {/* 1B. HEAD-TO-HEAD RIVALRY */}
+      {!isSelf && headToHead && (
+        <Card style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', backgroundColor: '#14141a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Swords size={18} color="var(--color-primary)" />
+            <div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--color-text-dim)', fontWeight: 800, textTransform: 'uppercase' }}>Head-to-Head Record</div>
+              <div style={{ fontSize: '1.02rem', fontWeight: 900 }}>
+                {tx('You', 'Kamu')} <span style={{ color: 'var(--color-primary)' }}>{headToHead.viewerWins}</span> — <span style={{ color: '#fb7185' }}>{headToHead.targetWins}</span> {profileData.displayName}
+                {headToHead.ties > 0 && <span style={{ fontSize: '0.78rem', color: 'var(--color-text-dim)' }}> ({headToHead.ties} seri)</span>}
+              </div>
+            </div>
+          </div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+            {headToHead.totalMeetings} {tx('total clashes', 'pertemuan')}
+          </span>
+        </Card>
+      )}
+
+      {/* 2. TABS BELOW: POST, ACHIEVEMENTS, LOCKER, SAVES, HISTORY */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div className="friend-tabs">
           <button
@@ -533,15 +735,23 @@ export function ProfilePage({
             onClick={() => setActiveTab('posts')}
           >
             <MessageSquare size={14} />
-            <span>{tx('Posts', 'Post')} ({userPosts.length})</span>
+            <span>{tx('Post', 'Post')} ({userPosts.length})</span>
           </button>
           <button
             type="button"
-            className={`btn btn-sm friend-tab-btn ${activeTab === 'history' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveTab('history')}
+            className={`btn btn-sm friend-tab-btn ${activeTab === 'achievements' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('achievements')}
           >
-            <History size={14} />
-            <span>{tx('History', 'Riwayat')} ({histories.length})</span>
+            <Award size={14} />
+            <span>{tx('Achievements', 'Achievements')} ({badges.length})</span>
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm friend-tab-btn ${activeTab === 'locker' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('locker')}
+          >
+            <Package size={14} />
+            <span>Locker ({lockerItems.length})</span>
           </button>
           {isSelf && (
             <button
@@ -550,9 +760,17 @@ export function ProfilePage({
               onClick={() => setActiveTab('saved')}
             >
               <Bookmark size={14} />
-              <span>{tx('Saved', 'Tersimpan')} ({savedTracks.length})</span>
+              <span>{tx('Saves', 'Saves')} ({savedTracks.length})</span>
             </button>
           )}
+          <button
+            type="button"
+            className={`btn btn-sm friend-tab-btn ${activeTab === 'history' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('history')}
+          >
+            <History size={14} />
+            <span>{tx('History', 'Riwayat')} ({histories.length})</span>
+          </button>
           {spotifyShowcase && (
             <button
               type="button"
@@ -586,6 +804,227 @@ export function ProfilePage({
               ))}
             </div>
           )
+        ) : activeTab === 'achievements' ? (
+          badges.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-dim)', borderTop: '1px solid var(--color-border-subtle)' }}>
+              {tx('No achievements unlocked yet.', 'Belum ada achievement yang terbuka.')}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))', gap: '10px' }}>
+              {badges.map(b => {
+                const renderBadgeIcon = () => {
+                  if (b.id === 'speed_demon') return <Zap size={16} color="#facc15" />;
+                  if (b.id === 'streak_master') return <Flame size={16} color="var(--color-warning)" />;
+                  if (b.id === 'sharp_ear') return <Target size={16} color="#38bdf8" />;
+                  if (b.id === '90s_nostalgia') return <Disc3 size={16} color="#c084fc" />;
+                  if (b.id === 'veteran') return <Crown size={16} color="#facc15" />;
+                  return <Award size={16} color="var(--color-primary)" />;
+                };
+                return (
+                  <div
+                    key={b.id}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      backgroundColor: '#131319',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px'
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '10px',
+                        backgroundColor: '#1b1b24',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      {renderBadgeIcon()}
+                    </div>
+                    <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#f3f4f6' }}>
+                      {b.label}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        ) : activeTab === 'locker' ? (
+          (() => {
+            const filteredLocker = lockerFilter === 'ALL'
+              ? lockerItems
+              : lockerItems.filter(i => i.type === lockerFilter);
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.06em', color: 'var(--color-text-dim)', textTransform: 'uppercase' }}>
+                    {tx('Locker Collection', 'Koleksi Locker')} ({filteredLocker.length})
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {[
+                      { id: 'ALL', label: tx('All', 'Semua') },
+                      { id: 'FRAME', label: 'Frames' },
+                      { id: 'VINYL', label: 'Vinyls' },
+                      { id: 'TITLE', label: 'Titles' }
+                    ].map(f => {
+                      const isActive = lockerFilter === f.id;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => setLockerFilter(f.id)}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '999px',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            border: isActive ? '1px solid rgba(29,185,84,0.45)' : '1px solid rgba(255,255,255,0.08)',
+                            backgroundColor: isActive ? 'rgba(29,185,84,0.14)' : '#121218',
+                            color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
+                          }}
+                        >
+                          {f.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {filteredLocker.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-dim)', borderTop: '1px solid var(--color-border-subtle)' }}>
+                    {lockerItems.length === 0
+                      ? tx('No cosmetic items in locker yet.', 'Belum ada item kosmetik di locker.')
+                      : tx('No items in this category yet.', 'Belum ada item di kategori ini.')}
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' }}>
+                    {filteredLocker.map(item => (
+                      <div
+                        key={item.id}
+                        style={{
+                          padding: '10px',
+                          borderRadius: '12px',
+                          backgroundColor: '#131319',
+                          border: item.isEquipped ? '1px solid var(--color-primary)' : '1px solid rgba(255,255,255,0.07)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}
+                      >
+                        <div
+                          style={{
+                            position: 'relative',
+                            height: '64px',
+                            borderRadius: '8px',
+                            backgroundColor: '#0c0c10',
+                            border: '1px solid rgba(255,255,255,0.05)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0 8px'
+                          }}
+                        >
+                          <span
+                            style={{
+                              position: 'absolute',
+                              top: '5px',
+                              left: '6px',
+                              fontSize: '0.56rem',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em',
+                              color: 'var(--color-text-dim)',
+                              padding: '1px 5px',
+                              borderRadius: '999px',
+                              backgroundColor: 'rgba(255,255,255,0.05)'
+                            }}
+                          >
+                            {item.type === 'FRAME' ? 'Frame' : item.type === 'VINYL' ? 'Vinyl' : 'Title'}
+                          </span>
+                          {item.isEquipped && (
+                            <span
+                              style={{
+                                position: 'absolute',
+                                top: '5px',
+                                right: '6px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                fontSize: '0.56rem',
+                                fontWeight: 800,
+                                color: 'var(--color-primary)',
+                                padding: '1px 5px',
+                                borderRadius: '999px',
+                                backgroundColor: 'rgba(29,185,84,0.14)',
+                                border: '1px solid rgba(29,185,84,0.4)'
+                              }}
+                            >
+                              <Check size={9} /> Equipped
+                            </span>
+                          )}
+                          {item.type === 'FRAME' ? (
+                            <Avatar
+                              src={profileData.avatarUrl}
+                              alt={profileData.displayName}
+                              seed={profileData.id || profileData.username}
+                              frame={item}
+                              style={{ width: '40px', height: '40px' }}
+                            />
+                          ) : item.type === 'VINYL' ? (
+                            <VinylArt size={40} borderRadius="50%" skin={item} forceDisc />
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                padding: '4px 9px',
+                                borderRadius: '999px',
+                                color: item.visualConfig?.color || '#facc15',
+                                backgroundColor: item.visualConfig?.bgColor || 'rgba(255,255,255,0.08)',
+                                border: `1px solid ${item.visualConfig?.color || '#facc15'}44`,
+                                maxWidth: '100%',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {item.name}
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ fontWeight: 800, fontSize: '0.82rem', color: '#f3f4f6', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.name}
+                        </div>
+
+                        {isSelf && (
+                          <div style={{ marginTop: 'auto', paddingTop: '2px' }}>
+                            <Button
+                              size="sm"
+                              variant={item.isEquipped ? 'secondary' : 'primary'}
+                              disabled={equipBusyId === item.id}
+                              onClick={() => handleToggleEquip(item)}
+                              style={{ width: '100%', padding: '5px 8px', fontSize: '0.74rem' }}
+                            >
+                              {item.isEquipped ? tx('Unequip', 'Lepas') : tx('Equip', 'Pasang')}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()
         ) : activeTab === 'saved' ? (
           savedTracks.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-dim)', borderTop: '1px solid var(--color-border-subtle)' }}>
