@@ -6,6 +6,7 @@ import FriendInviteModal from '../../components/FriendInviteModal.jsx';
 import Avatar from '../../components/Avatar.jsx';
 import socketService from '../../services/socket.js';
 import ApiClient from '../../services/api.js';
+import audioPlayer from '../../services/audioPlayer.js';
 import { useLanguage } from '../../hooks/useLanguage.jsx';
 
 export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
@@ -110,6 +111,7 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
 
   const handleToggleReady = async () => {
     if (togglingReady) return;
+    audioPlayer.unlock();
     try {
       setTogglingReady(true);
       setError(null);
@@ -131,6 +133,7 @@ export function RoomLobbyPage({ initialGame, user, onGameStarted, onLeave }) {
   const allReady = hasEnoughPlayers && nonHostPlayers.every(p => p.isReady);
 
   const handleStartGame = async () => {
+    audioPlayer.unlock();
     if (!hasEnoughPlayers) {
       setError(tx('At least 2 players are required to start a Multiplayer game!', 'Minimal 2 pemain diperlukan untuk memulai game Multiplayer!'));
       return;

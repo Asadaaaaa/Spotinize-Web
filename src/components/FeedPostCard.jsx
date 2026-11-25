@@ -38,7 +38,6 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
   const [reactBusy, setReactBusy] = useState(false);
   const [bookmarkBusy, setBookmarkBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [revealDailySpoiler, setRevealDailySpoiler] = useState(false);
   const [showReactPicker, setShowReactPicker] = useState(false);
   const reactPickerRef = useRef(null);
 
@@ -81,8 +80,16 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
     return 'Spotinize';
   };
 
+  const promptGuestRegister = () => {
+    window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'));
+  };
+
   const handleToggleReact = async (emoji) => {
-    if (!currentUserId || reactBusy) return;
+    if (!currentUserId) {
+      promptGuestRegister();
+      return;
+    }
+    if (reactBusy) return;
     soundFx.playTap();
     haptics.tap();
     try {
@@ -101,7 +108,11 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
   };
 
   const handleToggleBookmark = async () => {
-    if (!currentUserId || !post.track || bookmarkBusy) return;
+    if (!currentUserId) {
+      promptGuestRegister();
+      return;
+    }
+    if (!post.track || bookmarkBusy) return;
     try {
       setBookmarkBusy(true);
       const res = await ApiClient.post('/saved-tracks/toggle', {
@@ -191,28 +202,59 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
   const trackKey = post.track ? `post:${post.id}:${post.track.spotifyId || post.track.title}` : null;
   const isTrackPlaying = Boolean(trackKey && audioState.currentKey === trackKey);
 
-  return (
-    <article className={`feed-post-item ${isSpotinizePost ? 'spotinize-official-card' : ''}`}>
-      {/* Header: Author + Time (or minimal editorial meta for @spotinize) */}
+  const content = (
+    <>
+      {/* Header: Author + Time (or elevated official @spotinize header) */}
       {isSpotinizePost ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.73rem', fontWeight: 700, color: 'var(--color-text-dim)' }}>
-            <span style={{ color: 'var(--color-text-muted)' }}>{getSpotinizeSectionLabel()}</span>
-            <span>·</span>
-            <span>{formatRelativeTime(post.createdAt, lang)}</span>
-          </div>
-          {isOwner && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={handleDelete}
-              disabled={deleting}
-              style={{ padding: '4px', color: 'var(--color-text-dim)' }}
-              title={tx('Delete post', 'Hapus post')}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexWrap: 'wrap' }}>
+            <img
+              src="/spotinize-logo.png"
+              alt="Spotinize"
+              style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                flexShrink: 0,
+                display: 'block'
+              }}
+            />
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 800, fontSize: '0.88rem', color: 'var(--color-text-bright)' }}>
+              <span>Spotinize</span>
+              <CheckCircle2 size={13} color="var(--color-primary)" />
+            </span>
+            <span
+              style={{
+                fontSize: '0.66rem',
+                fontWeight: 800,
+                padding: '2px 8px',
+                borderRadius: '999px',
+                backgroundColor: 'rgba(29, 185, 84, 0.12)',
+                border: '1px solid rgba(29, 185, 84, 0.28)',
+                color: 'var(--color-primary)',
+                letterSpacing: '0.01em'
+              }}
             >
-              {deleting ? <Loader2 size={13} className="spin" /> : <Trash2 size={13} />}
-            </button>
-          )}
+              {getSpotinizeSectionLabel()}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+            <span style={{ fontSize: '0.73rem', fontWeight: 600, color: 'var(--color-text-dim)' }}>
+              {formatRelativeTime(post.createdAt, lang)}
+            </span>
+            {isOwner && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{ padding: '4px', color: 'var(--color-text-dim)' }}
+                title={tx('Delete post', 'Hapus post')}
+              >
+                {deleting ? <Loader2 size={13} className="spin" /> : <Trash2 size={13} />}
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="feed-post-header">
@@ -273,36 +315,11 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
         </div>
       )}
 
-      {/* Post Caption (with Daily Spoiler Shield if viewer hasn't played today's Daily) */}
+      {/* Post Caption */}
       {displayContent && (
-        post.isDailySpoilerHidden && !revealDailySpoiler ? (
-          <div style={{
-            position: 'relative',
-            padding: '12px',
-            borderRadius: '10px',
-            backgroundColor: '#14141a',
-            border: '1px solid #262632'
-          }}>
-            <p className="daily-spoiler-blur" style={{ fontSize: '0.9rem', color: 'var(--color-text)', lineHeight: 1.5, margin: 0 }}>
-              {displayContent}
-            </p>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setRevealDailySpoiler(true)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Shield size={14} color="var(--color-primary)" />
-                <span>{tx('Daily Spoiler Shield · Click to Reveal', 'Spoiler Daily · Klik untuk Buka')}</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <p style={{ fontSize: '0.93rem', color: 'var(--color-text)', lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap' }}>
-            {displayContent}
-          </p>
-        )
+        <p style={{ fontSize: '0.93rem', color: 'var(--color-text)', lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap' }}>
+          {displayContent}
+        </p>
       )}
 
       {/* Optional Source Link (e.g. for Official AI News) */}
@@ -556,6 +573,22 @@ export function FeedPostCard({ post: initialPost, currentUserId, onOpenPublicPro
           )}
         </div>
       )}
+    </>
+  );
+
+  if (isSpotinizePost) {
+    return (
+      <div className="feed-post-item spotinize-official-wrap">
+        <article className="spotinize-official-card">
+          {content}
+        </article>
+      </div>
+    );
+  }
+
+  return (
+    <article className="feed-post-item">
+      {content}
     </article>
   );
 }

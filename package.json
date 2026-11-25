@@ -8,9 +8,11 @@
     "build": "node ../scripts/build-web.js",
     "build:soft": "node ../scripts/build-web.js --soft",
     "build:hard": "node ../scripts/build-web.js --hard",
+    "build:hard-all": "node ../scripts/build-web.js --hard-all",
     "preview": "vite preview",
     "version:soft": "node ../scripts/bump-version.js soft",
-    "version:hard": "node ../scripts/bump-version.js hard"
+    "version:hard": "node ../scripts/bump-version.js hard",
+    "version:hard-all": "node ../scripts/bump-version.js hard_all"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

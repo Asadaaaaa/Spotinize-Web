@@ -326,7 +326,7 @@ export function SearchPage({ user, onOpenPublicProfile, onPlayChallenge }) {
             {trending.suggestedUsers.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div className="section-mini-label">
-                  <Sparkles size={14} color="var(--color-primary)" /> {tx('People You May Know', 'People You May Know')}
+                  <UserPlus size={14} color="var(--color-primary)" /> {tx('People You May Know', 'People You May Know')}
                 </div>
                 {trending.suggestedUsers.slice(0, 5).map(renderUserRow)}
               </div>

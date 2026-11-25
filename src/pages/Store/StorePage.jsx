@@ -39,7 +39,7 @@ export function StorePage() {
       const [catRes, gachaRes, invRes] = await Promise.all([
         ApiClient.get('/store/catalog'),
         ApiClient.get('/gacha/info'),
-        ApiClient.get('/store/inventory')
+        user?.id ? ApiClient.get('/store/inventory').catch(() => ({ items: [] })) : Promise.resolve({ items: [] })
       ]);
       setCatalog(catRes.items || []);
       setUtilities(catRes.utilities || []);
@@ -51,7 +51,7 @@ export function StorePage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     loadAll();
@@ -64,6 +64,10 @@ export function StorePage() {
   };
 
   const handleBuyItem = async (item) => {
+    if (!user?.id) {
+      window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'));
+      return;
+    }
     try {
       setBusyId(item.id);
       setError(null);
@@ -80,6 +84,10 @@ export function StorePage() {
   };
 
   const handleBuyUtility = async (code) => {
+    if (!user?.id) {
+      window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'));
+      return;
+    }
     try {
       setBusyId(code);
       setError(null);
@@ -103,6 +111,10 @@ export function StorePage() {
   };
 
   const handleGachaPull = async (count, crateId = 'crate_groove') => {
+    if (!user?.id) {
+      window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'));
+      return;
+    }
     const crate = (gachaInfo?.crates || []).find(c => c.id === crateId);
     try {
       setBusyId(`${crateId}_${count}`);
@@ -234,7 +246,7 @@ export function StorePage() {
               Store &amp; Gacha
             </h2>
             <p style={{ fontSize: '0.84rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
-              {tx('Cosmetics & streak protection — zero pay-to-win.', 'Kosmetik & proteksi streak — tanpa pay-to-win.')}
+              {tx('Frames, vinyl skins, titles, crates & utilities.', 'Frame, skin vinyl, title, crate & utilitas.')}
             </p>
           </div>
 

@@ -4,9 +4,11 @@ import Button from './Button.jsx';
 import ApiClient from '../services/api.js';
 import soundFx from '../services/soundFx.js';
 import haptics from '../services/haptics.js';
+import { useAuth } from '../hooks/useAuth.jsx';
 import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function QuestsModal({ isOpen, onClose, onQuestClaimed }) {
+  const { user } = useAuth();
   const { tx } = useLanguage();
   const [tab, setTab] = useState('DAILY');
   const [data, setData] = useState({ daily: [], weekly: [] });
@@ -35,6 +37,11 @@ export function QuestsModal({ isOpen, onClose, onQuestClaimed }) {
   const list = tab === 'DAILY' ? (data.daily || []) : (data.weekly || []);
 
   const handleClaim = async (questId) => {
+    if (!user?.id) {
+      onClose?.();
+      window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'));
+      return;
+    }
     try {
       setClaimingId(questId);
       setError(null);

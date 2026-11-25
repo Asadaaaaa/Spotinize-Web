@@ -4,13 +4,16 @@ import ApiClient from '../services/api.js';
 import VinylArt from './VinylArt.jsx';
 import { useLanguage } from '../hooks/useLanguage.jsx';
 
+const SONG_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+const SONG_SEARCH_CACHE_MAX = 150;
+const globalSongSearchCache = new Map();
+
 export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttempts = 3 }) {
   const { tx } = useLanguage();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef(null);
-  const searchCacheRef = useRef(new Map());
   const requestIdRef = useRef(0);
 
   useEffect(() => {
@@ -34,9 +37,10 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
       return;
     }
 
-    // Instant 0ms cache hit from browser memory
-    if (searchCacheRef.current.has(trimmed)) {
-      setResults(searchCacheRef.current.get(trimmed));
+    // Instant 0ms cache hit from persistent module-level memory
+    const cached = globalSongSearchCache.get(trimmed);
+    if (cached && Date.now() < cached.expiresAt) {
+      setResults(cached.list);
       setLoading(false);
       return;
     }
@@ -48,22 +52,15 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
         const res = await ApiClient.get(`/spotify/search/tracks?q=${encodeURIComponent(trimmed)}&limit=8`);
         if (cancelled || requestIdRef.current !== currentReqId) return;
 
-        const rawList = res.tracks || [];
-        // Prioritize exact/prefix title or "title artist" matches at the top
-        const list = [...rawList].sort((a, b) => {
-          const aTitle = (a.title || '').toLowerCase();
-          const bTitle = (b.title || '').toLowerCase();
-          const aFull = `${aTitle} ${(a.artist || '').toLowerCase()}`;
-          const bFull = `${bTitle} ${(b.artist || '').toLowerCase()}`;
-          const score = (title, full) =>
-            title === trimmed ? 4 :
-            full.startsWith(trimmed) || title.startsWith(trimmed) ? 3 :
-            title.includes(trimmed) ? 2 :
-            full.includes(trimmed) ? 1 : 0;
-          return score(bTitle, bFull) - score(aTitle, aFull);
-        }).slice(0, 6);
-
-        searchCacheRef.current.set(trimmed, list);
+        const list = (res.tracks || []).slice(0, 8);
+        if (globalSongSearchCache.size >= SONG_SEARCH_CACHE_MAX) {
+          const oldestKey = globalSongSearchCache.keys().next().value;
+          if (oldestKey !== undefined) globalSongSearchCache.delete(oldestKey);
+        }
+        globalSongSearchCache.set(trimmed, {
+          list,
+          expiresAt: Date.now() + SONG_SEARCH_CACHE_TTL_MS
+        });
         setResults(list);
       } catch (err) {
         if (!cancelled) console.error('Search error:', err);
@@ -72,7 +69,7 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
           setLoading(false);
         }
       }
-    }, 280);
+    }, 160);
 
     return () => {
       cancelled = true;
@@ -121,17 +118,29 @@ export function SongSearchModal({ isOpen, onClose, onSelectSong, remainingAttemp
             ref={inputRef}
             type="text"
             className="input"
-            style={{ paddingLeft: '42px', fontSize: '1rem' }}
+            style={{ paddingLeft: '42px', paddingRight: '40px', fontSize: '1rem' }}
             placeholder={tx('Type a song title or artist...', 'Ketik judul lagu atau artis...')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           {loading && (
-            <Loader2 
-              size={18} 
-              className="spin" 
-              style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-primary)' }} 
-            />
+            <span
+              style={{
+                position: 'absolute',
+                right: '14px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                pointerEvents: 'none'
+              }}
+            >
+              <Loader2
+                size={18}
+                className="spin"
+                style={{ color: 'var(--color-primary)' }}
+              />
+            </span>
           )}
         </div>
 

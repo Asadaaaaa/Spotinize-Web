@@ -5,11 +5,12 @@ import { useLanguage } from '../hooks/useLanguage.jsx';
 import Avatar from './Avatar.jsx';
 import Logo from './Logo.jsx';
 
-export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifications, hideNavLinks = false }) {
+export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifications, hideNavLinks = false, isLanding = false }) {
   const { user, isAuthenticated, logout } = useAuth();
   const { lang, toggleLang, t } = useLanguage();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
+  const showOnlyVersion = isLanding || currentTab === 'landing';
 
   useEffect(() => {
     if (!isUserMenuOpen) return;
@@ -41,7 +42,7 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
           justifyContent: 'space-between',
           height: '64px'
         }}>
-          {/* Brand Logo on Left (Pure Text Typography) */}
+          {/* Brand Logo on Left (or Version Badge Only on Landing Page) */}
           <div 
             onClick={() => onNavigate('landing')}
             style={{
@@ -53,21 +54,21 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
               padding: '4px 0'
             }}
           >
-            <Logo size="md" />
+            {!showOnlyVersion && <Logo size="md" />}
             <span style={{
-              fontSize: '0.58rem',
-              fontWeight: 700,
+              fontSize: showOnlyVersion ? '0.72rem' : '0.58rem',
+              fontWeight: showOnlyVersion ? 800 : 700,
               letterSpacing: '0.03em',
-              padding: '1px 6px',
+              padding: showOnlyVersion ? '4px 10px' : '1px 6px',
               borderRadius: 'var(--radius-full, 9999px)',
               backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              color: 'var(--color-text-dim, #8e8e93)',
+              color: showOnlyVersion ? 'var(--color-text-muted, #a1a1aa)' : 'var(--color-text-dim, #8e8e93)',
               border: '1px solid var(--color-border)',
               lineHeight: 1.2,
               userSelect: 'none',
               whiteSpace: 'nowrap'
             }}>
-              {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v0.5.24112601'} Beta
+              {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v0.7.0'} Beta
             </span>
           </div>
 
@@ -278,9 +279,9 @@ export function Navbar({ currentTab, onNavigate, unreadCount = 0, onOpenNotifica
             ) : (
               <button 
                 className="btn btn-primary btn-sm"
-                onClick={() => onNavigate('login')}
+                onClick={() => onNavigate('register')}
               >
-                {t('navLogin')}
+                Register
               </button>
             )}
           </div>

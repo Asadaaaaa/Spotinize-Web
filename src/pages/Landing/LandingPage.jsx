@@ -3,10 +3,11 @@ import Lenis from 'lenis';
 import {
   Play, Sparkles, Zap, Users, ArrowRight, Lock, User as UserIcon,
   LogIn, UserPlus, AlertCircle, Disc3, Flame, Headphones, Bookmark,
-  CheckCircle2, Trophy, EyeOff, ChevronDown
+  CheckCircle2, Trophy, EyeOff, ChevronDown, ShoppingBag, Swords, Gift, Package
 } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Logo from '../../components/Logo.jsx';
+import AuthModal from '../../components/AuthModal.jsx';
 import LandingDemoSection from '../../components/LandingDemoSection.jsx';
 import ApiClient from '../../services/api.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
@@ -34,8 +35,9 @@ const REVEAL_BARS = [
 ];
 
 export function LandingPage({ onStart, authModal: externalAuthModal = null, setAuthModal: setExternalAuthModal = null }) {
-  const { register, login, isAuthenticated } = useAuth();
+  const { register, login, loginAsGuest, isAuthenticated } = useAuth();
   const { tx } = useLanguage();
+  const [guestStarting, setGuestStarting] = useState(false);
 
   // Modal states: null | 'LOGIN' | 'REGISTER'
   const [internalAuthModal, setInternalAuthModal] = useState(null);
@@ -201,6 +203,19 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
     setAuthModal('REGISTER');
   };
 
+  const handleGuestPlay = async () => {
+    if (guestStarting) return;
+    try {
+      setGuestStarting(true);
+      await loginAsGuest();
+      onStart();
+    } catch (err) {
+      setErrorMsg(err.message || tx('Failed to start guest mode', 'Gagal memulai mode guest'));
+    } finally {
+      setGuestStarting(false);
+    }
+  };
+
   const openLogin = () => {
     setErrorMsg('');
     setUsername('');
@@ -286,8 +301,8 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
 
             <p className="lp-hero-subtitle">
               {tx(
-                'Guess songs from 0.1s, drop Blind Song challenges on the Music Feed, follow music lovers, and keep your daily streak alive.',
-                'Tebak lagu mulai dari 0.1 detik, bagikan Blind Song Drop & tantangan skor di Music Feed, follow sesama pecinta musik, dan jaga streak harianmu.'
+                'Guess songs from 0.1s, conquer Daily Challenges & Ranked 1v1 Duels, open Cosmetic Crates in the Store, and connect on the Music Feed.',
+                'Tebak lagu mulai dari 0.1 detik, taklukkan Daily Challenge & Ranked 1v1 Duel, buka Crate Kosmetik di Store, dan seru-seruan di Music Feed.'
               )}
             </p>
 
@@ -315,13 +330,14 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
                   </Button>
 
                   <Button
-                    variant="secondary"
+                    variant="ghost"
                     size="lg"
-                    onClick={openLogin}
-                    icon={<LogIn size={20} color="var(--color-primary)" />}
-                    style={{ padding: '16px 28px', fontSize: '1.1rem', fontWeight: 700 }}
+                    disabled={guestStarting}
+                    onClick={handleGuestPlay}
+                    icon={<Play size={18} color="var(--color-primary)" />}
+                    style={{ padding: '16px 24px', fontSize: '1.02rem', fontWeight: 800, border: '1px solid var(--color-border)' }}
                   >
-                    {tx('Log In', 'Masuk / Login')}
+                    {guestStarting ? tx('Entering...', 'Masuk...') : tx('Try as Guest', 'Coba Main (Guest)')}
                   </Button>
                 </>
               )}
@@ -499,18 +515,18 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
                     <img src={pin3.albumArt} alt={pin3.title} className="lp-pin-cover-img" />
                   ) : (
                     <div className="lp-pin-cover-fallback">
-                      <Headphones size={36} />
+                      <Package size={36} />
                     </div>
                   )}
                   <span className="lp-pin-float-pill">
-                    <Headphones size={11} color="var(--color-primary)" /> Spotify Opt-In
+                    <ShoppingBag size={11} color="var(--color-primary)" /> Store &amp; Crates
                   </span>
                 </div>
                 <div className="lp-pin-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {pin3?.title || 'Now Playing Live'}
+                  {tx('Cosmetic Crates & Locker', 'Crate Kosmetik & Locker')}
                 </div>
                 <div className="lp-pin-sub">
-                  {tx('Optional connect to share Now Playing & playlists.', 'Hubungkan opsional untuk tampilkan Now Playing.')}
+                  {tx('Unlock Avatar Frames, Vinyl Skins & Titles with Notes.', 'Buka Avatar Frame, Vinyl Skin & Title pakai Notes.')}
                 </div>
               </div>
             </div>
@@ -645,12 +661,12 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
                       </span>
                     </div>
                     <h3 style={{ fontSize: '1.18rem', fontWeight: 900, marginBottom: '6px' }}>
-                      {tx('Live Multiplayer & Beat My Score', 'Multiplayer Live & Beat My Score')}
+                      {tx('Multiplayer, Speed Buzz & Ranked 1v1', 'Multiplayer, Speed Buzz & Ranked 1v1')}
                     </h3>
                     <p style={{ fontSize: '0.86rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
                       {tx(
-                        'Invite Mutual friends to private live rooms via Socket.IO, or share any match as an Async Challenge with the exact same track sequence.',
-                        'Undang teman Mutual ke room live via Socket.IO, atau bagikan hasil main jadi Async Challenge dengan set lagu yang persis sama.'
+                        'Play Classic, Speed Buzz, Survival, or Ranked 1v1 Duels in real time — plus Async Beat My Score challenges.',
+                        'Mainkan mode Classic, Speed Buzz, Survival, hingga Ranked 1v1 Duel secara real-time — plus Async Beat My Score challenge.'
                       )}
                     </p>
                   </div>
@@ -684,12 +700,12 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
                       </span>
                     </div>
                     <h3 style={{ fontSize: '1.18rem', fontWeight: 900, marginBottom: '6px' }}>
-                      @spotinize AI & Daily Streak
+                      {tx('Daily Challenge, Quests & Streaks', 'Daily Challenge, Quests & Streak')}
                     </h3>
                     <p style={{ fontSize: '0.86rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
                       {tx(
-                        'Hourly AI music news, fun facts, and community hardest-song drops — plus daily streaks & song bookmarks.',
-                        'Update AI tiap jam berisi berita musik, fun fact, & lagu tersulit komunitas — plus daily streak & bookmark lagu.'
+                        'Conquer the 5-song Daily Challenge, claim 7-day Daily Login & Quest rewards, and follow @spotinize official pulse.',
+                        'Taklukkan Daily Challenge 5 lagu, klaim hadiah Daily Login 7 hari & Quest, serta ikuti update resmi @spotinize.'
                       )}
                     </p>
                   </div>
@@ -711,22 +727,22 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
                   </div>
                 </div>
 
-                {/* Feature Card 5: Music Identity + Optional Spotify */}
+                {/* Feature Card 5: Store, Crates & Music Identity */}
                 <div
                   className="lp-hscroll-card lp-hscroll-card--wide"
                   onMouseMove={handleBentoMouseMove}
                 >
                   <div>
                     <div className="lp-bento-icon" style={{ backgroundColor: 'var(--color-primary-subtle)', color: 'var(--color-primary)' }}>
-                      <Headphones size={21} />
+                      <ShoppingBag size={21} />
                     </div>
                     <h3 style={{ fontSize: '1.18rem', fontWeight: 900, marginBottom: '6px' }}>
-                      {tx('Music Identity & Optional Spotify', 'Identitas Musik & Spotify Opsional')}
+                      {tx('Store, Crates & Music Identity', 'Store, Crate & Identitas Musik')}
                     </h3>
                     <p style={{ fontSize: '0.86rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
                       {tx(
-                        'Sign up with username only, pin Top 5 songs, compare Taste Compatibility %, and optionally connect Spotify for Now Playing.',
-                        'Daftar cukup pakai username, pin Top 5 lagu favorit, cek Taste Compatibility %, & opsional connect Spotify untuk Now Playing.'
+                        'Open 3 tiers of Cosmetic Crates, equip Avatar Frames, Vinyl Skins & Titles, unlock Achievements, and compare Taste Compatibility %.',
+                        'Buka 3 tier Crate Kosmetik, pasang Avatar Frame, Vinyl Skin & Title, raih Achievements, dan cek Taste Compatibility %.'
                       )}
                     </p>
                   </div>
@@ -742,9 +758,9 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
                       <div className="lp-taste-bar-fill" />
                     </div>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      <span className="badge badge-green" style={{ fontSize: '0.66rem' }}>Speed Demon</span>
-                      <span className="badge badge-gray" style={{ fontSize: '0.66rem' }}>Top 5 Pinned</span>
-                      <span className="badge badge-gray" style={{ fontSize: '0.66rem' }}>Spotify Opt-In</span>
+                      <span className="badge badge-green" style={{ fontSize: '0.66rem' }}>Cosmetic Crates</span>
+                      <span className="badge badge-gray" style={{ fontSize: '0.66rem' }}>Avatar Frames</span>
+                      <span className="badge badge-gray" style={{ fontSize: '0.66rem' }}>Achievements</span>
                     </div>
                   </div>
                 </div>
@@ -778,8 +794,8 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
             </h2>
             <p style={{ fontSize: '0.92rem', color: 'var(--color-text-muted)', maxWidth: '480px', margin: 0 }}>
               {tx(
-                'Jump straight into Solo, Multiplayer, or the Music Feed with a quick username signup.',
-                'Langsung masuk ke mode Solo, Multiplayer, dan Music Feed cukup dengan username.'
+                'Jump straight into Solo, Daily Challenge, Ranked 1v1, Multiplayer, Store Crates, and the Music Feed with a quick username signup.',
+                'Langsung masuk ke mode Solo, Daily Challenge, Ranked 1v1, Multiplayer, Crate Store, dan Music Feed cukup dengan username.'
               )}
             </p>
             <div style={{ marginTop: '6px' }}>
@@ -788,9 +804,14 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
                   {tx('Go to Home', 'Buka Home')}
                 </Button>
               ) : (
-                <Button variant="primary" size="lg" onClick={openRegister} icon={<UserPlus size={18} />}>
-                  {tx('Create Free Account', 'Buat Akun Sekarang')}
-                </Button>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <Button variant="primary" size="lg" onClick={openRegister} icon={<UserPlus size={18} />}>
+                    {tx('Create Free Account', 'Buat Akun Sekarang')}
+                  </Button>
+                  <Button variant="secondary" size="lg" disabled={guestStarting} onClick={handleGuestPlay} icon={<Play size={18} color="var(--color-primary)" />}>
+                    {guestStarting ? tx('Entering...', 'Masuk...') : tx('Try as Guest', 'Coba Main (Guest)')}
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -885,133 +906,12 @@ export function LandingPage({ onStart, authModal: externalAuthModal = null, setA
       </footer>
 
       {/* Auth Modal (Register / Login) */}
-      {authModal && (
-        <div className="modal-backdrop" onClick={() => setAuthModal(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '28px 24px' }}>
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '1.4rem', fontWeight: 900, marginBottom: '6px' }}>
-                {authModal === 'REGISTER' ? tx('Create New Account', 'Daftar Akun Baru') : tx('Log In to Spotinize', 'Masuk ke Spotinize')}
-              </h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                {authModal === 'REGISTER'
-                  ? tx('Sign up with just a username & password — no email required.', 'Daftar dengan username & password tanpa perlu email.')
-                  : tx('Enter your account username and password.', 'Masukkan username dan password akun kamu.')}
-              </p>
-            </div>
-
-            {errorMsg && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 14px',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'rgba(235, 87, 87, 0.15)',
-                border: '1px solid rgba(235, 87, 87, 0.3)',
-                color: '#ff6b6b',
-                fontSize: '0.85rem',
-                marginBottom: '16px'
-              }}>
-                <AlertCircle size={16} style={{ flexShrink: 0 }} />
-                <span>{errorMsg}</span>
-              </div>
-            )}
-
-            <form onSubmit={authModal === 'REGISTER' ? handleRegisterSubmit : handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
-                  USERNAME
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <UserIcon size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-dim)' }} />
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="john_doe"
-                    value={username}
-                    onChange={e => setUsername(authModal === 'REGISTER' ? e.target.value.replace(/[^a-zA-Z0-9_]/g, '') : e.target.value)}
-                    style={{ paddingLeft: '38px', fontSize: '0.95rem' }}
-                    autoFocus
-                    required
-                  />
-                </div>
-              </div>
-
-              {authModal === 'REGISTER' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
-                    {tx('DISPLAY NAME (OPTIONAL)', 'NAMA LENGKAP / PANGGILAN (OPSIONAL)')}
-                  </label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="John Doe"
-                    value={displayName}
-                    onChange={e => setDisplayName(e.target.value)}
-                    style={{ fontSize: '0.95rem' }}
-                  />
-                </div>
-              )}
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
-                  PASSWORD
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <Lock size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-dim)' }} />
-                  <input
-                    type="password"
-                    className="input"
-                    placeholder={tx('Minimum 4 characters...', 'Minimal 4 karakter...')}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    style={{ paddingLeft: '38px', fontSize: '0.95rem' }}
-                    required
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                variant="primary"
-                size="md"
-                fullWidth
-                disabled={submitting}
-                icon={<ArrowRight size={18} />}
-                style={{ height: '48px', fontSize: '1rem', fontWeight: 800, marginTop: '8px' }}
-              >
-                {submitting
-                  ? tx('Processing...', 'Memproses...')
-                  : (authModal === 'REGISTER' ? tx('Sign Up Now', 'Daftar Sekarang') : tx('Log In Now', 'Masuk Sekarang'))}
-              </Button>
-            </form>
-
-            <div style={{ textAlign: 'center', marginTop: '18px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-              {authModal === 'REGISTER' ? (
-                <span>
-                  {tx('Already have an account?', 'Sudah punya akun?')}{' '}
-                  <button
-                    onClick={openLogin}
-                    style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
-                  >
-                    {tx('Log in here', 'Masuk di sini')}
-                  </button>
-                </span>
-              ) : (
-                <span>
-                  {tx("Don't have an account?", 'Belum punya akun?')}{' '}
-                  <button
-                    onClick={openRegister}
-                    style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
-                  >
-                    {tx('Sign up here', 'Daftar di sini')}
-                  </button>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <AuthModal
+        mode={authModal}
+        onChangeMode={setAuthModal}
+        onClose={() => setAuthModal(null)}
+        onSuccess={onStart}
+      />
     </div>
   );
 }

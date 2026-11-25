@@ -7,9 +7,11 @@ import VinylArt from './VinylArt.jsx';
 import ApiClient from '../services/api.js';
 import soundFx from '../services/soundFx.js';
 import haptics from '../services/haptics.js';
+import { useAuth } from '../hooks/useAuth.jsx';
 import { useLanguage } from '../hooks/useLanguage.jsx';
 
 export function DailyLoginModal({ isOpen, onClose, onClaimed }) {
+  const { user } = useAuth();
   const { tx } = useLanguage();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -40,6 +42,11 @@ export function DailyLoginModal({ isOpen, onClose, onClaimed }) {
   if (!isOpen) return null;
 
   const handleClaim = async () => {
+    if (!user?.id) {
+      onClose?.();
+      window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'));
+      return;
+    }
     if (claiming || !status?.canClaimToday) return;
     try {
       setClaiming(true);

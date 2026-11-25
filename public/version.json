@@ -1,6 +1,7 @@
 {
-  "version": "v0.2.25112601",
+  "version": "v0.7.0",
   "stage": "release",
-  "patchType": "soft",
-  "updatedAt": "2026-11-25T05:02:59.865Z"
+  "patchType": "hard",
+  "patchLevel": 1,
+  "updatedAt": "2026-11-25T13:42:30.000Z"
 }

@@ -1315,6 +1315,10 @@
   display: none;
 }
 
+.feed-mobile-composer-card {
+  display: none;
+}
+
 .mobile-fab-post {
   display: none;
 }
@@ -1390,6 +1394,10 @@
 
 /* Mobile Breakpoint (< 768px: Single Column + Top Compact Header + Bottom Nav + FAB) */
 @media (max-width: 768px) {
+  .feed-mobile-composer-card {
+    display: flex;
+  }
+
   .profile-share-label {
     display: none;
   }
@@ -2090,13 +2098,137 @@
 }
 
 /* Official @spotinize Editorial Card */
-.feed-post-item.spotinize-official-card {
-  background-color: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-left: 3px solid rgba(29, 185, 84, 0.5);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
-  margin: 4px 0;
+.spotinize-official-card {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  background-color: #151a1d;
+  border: 1px solid rgba(29, 185, 84, 0.28);
+  border-left: 3.5px solid var(--color-primary);
+  border-radius: 14px;
+  padding: 15px 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+}
+
+/* Profile Underline Tabs (Horizontally Scrollable) */
+.profile-tabs-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.profile-tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.profile-tab-item {
+  position: relative;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-main);
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.profile-tab-item:hover {
+  color: var(--color-text-bright);
+}
+
+.profile-tab-item.active {
+  color: var(--color-text-bright);
+  font-weight: 800;
+}
+
+.profile-tab-item.active::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2.5px;
+  border-radius: 999px;
+  background-color: var(--color-primary);
+}
+
+/* Duolingo-Style Streak Animations */
+@keyframes streakFlamePop {
+  0% { transform: scale(0.5) rotate(-10deg); opacity: 0; }
+  60% { transform: scale(1.14) rotate(4deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes streakRingPulse {
+  0%, 100% { transform: scale(0.95); opacity: 0.45; }
+  50% { transform: scale(1.14); opacity: 0.9; }
+}
+
+@keyframes streakDayIgnite {
+  0% { transform: scale(0.6); opacity: 0.4; }
+  65% { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes streakCountPop {
+  0% { transform: translateY(8px) scale(0.8); opacity: 0; }
+  70% { transform: translateY(-2px) scale(1.08); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.streak-flame-hero {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.streak-flame-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(251, 146, 60, 0.45);
+  background-color: rgba(251, 146, 60, 0.08);
+  animation: streakRingPulse 2s ease-in-out infinite;
+}
+
+.streak-flame-core {
+  position: relative;
+  z-index: 1;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background-color: rgba(251, 146, 60, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: streakFlamePop 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.streak-count-pop {
+  animation: streakCountPop 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.streak-cal-day.lit-today {
+  animation: streakDayIgnite 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+  box-shadow: 0 0 14px rgba(251, 146, 60, 0.45);
 }
 
 .react-pill-btn.love-active {

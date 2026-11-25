@@ -1,3 +1,5 @@
+import feedAudioManager from './feedAudioManager.js';
+
 class AudioCluePlayer {
   constructor() {
     this.audio = null;
@@ -91,16 +93,22 @@ class AudioCluePlayer {
     try {
       const ctx = this._getAudioContext();
       if (!ctx) return;
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
-      }
-      if (!this.hasPrimedContext) {
-        this.hasPrimedContext = true;
-        const silentBuf = ctx.createBuffer(1, 1, ctx.sampleRate || 44100);
-        const src = ctx.createBufferSource();
-        src.buffer = silentBuf;
-        src.connect(ctx.destination);
-        src.start(0);
+
+      const primeIfRunning = () => {
+        if (ctx.state === 'running' && !this.hasPrimedContext) {
+          this.hasPrimedContext = true;
+          const silentBuf = ctx.createBuffer(1, 1, ctx.sampleRate || 44100);
+          const src = ctx.createBufferSource();
+          src.buffer = silentBuf;
+          src.connect(ctx.destination);
+          src.start(0);
+        }
+      };
+
+      if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
+        ctx.resume().then(primeIfRunning).catch(() => {});
+      } else {
+        primeIfRunning();
       }
     } catch (e) {}
   }
@@ -156,7 +164,8 @@ class AudioCluePlayer {
     }
 
     const promise = (async () => {
-      for (let attempt = 0; attempt < 2; attempt++) {
+      const retryDelays = [300, 800];
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const res = await fetch(url);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -175,23 +184,23 @@ class AudioCluePlayer {
           const blob = new Blob([arrayBuffer], { type: contentType || 'audio/mpeg' });
           this.blobCache.set(url, URL.createObjectURL(blob));
 
-          // Eagerly decode PCM buffer for 0ms instant Web Audio playback
-          const ctx = this._getAudioContext();
-          if (ctx) {
+          // Eagerly decode PCM buffer only if AudioContext already exists and is running
+          const ctx = this.audioCtx;
+          if (ctx && ctx.state === 'running') {
             try {
               const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
               if (decoded && decoded.duration > 0) {
                 this.audioBufferCache.set(url, decoded);
               }
             } catch (decodeErr) {
-              // Context may still be suspended prior to user gesture; arrayBufferCache will decode on click
+              // ArrayBufferCache remains ready to decode on user gesture
             }
           }
 
           return true;
         } catch (err) {
-          if (attempt === 0) {
-            await new Promise(r => setTimeout(r, 300));
+          if (attempt < retryDelays.length) {
+            await new Promise(r => setTimeout(r, retryDelays[attempt]));
           } else {
             console.warn('Audio preload failed for:', url, err.message);
           }
@@ -252,6 +261,7 @@ class AudioCluePlayer {
    * Plays clue from audio URL using Web Audio API primary path + hardened HTMLAudio fallback.
    */
   async playClue(audioUrl, durationSeconds, onEnd = null) {
+    try { feedAudioManager.stop(); } catch (e) {}
     this.unlock();
     this.stop();
 
@@ -272,25 +282,29 @@ class AudioCluePlayer {
       const ctx = this._getAudioContext();
       if (ctx) {
         const wasCold = ctx.state !== 'running' || (Date.now() - this.lastAudioActivityAt > 4000);
-        if (ctx.state === 'suspended') {
-          await ctx.resume();
+        if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
+          await Promise.race([
+            ctx.resume().catch(() => {}),
+            new Promise(r => setTimeout(r, 400))
+          ]);
           if (playId !== this.currentPlayId) return;
         }
 
-        let audioBuffer = this.audioBufferCache.get(audioUrl);
-        if (!audioBuffer && this.arrayBufferCache.has(audioUrl)) {
-          try {
-            audioBuffer = await ctx.decodeAudioData(this.arrayBufferCache.get(audioUrl).slice(0));
-            if (playId !== this.currentPlayId) return;
-            if (audioBuffer) {
-              this.audioBufferCache.set(audioUrl, audioBuffer);
+        if (ctx.state === 'running') {
+          let audioBuffer = this.audioBufferCache.get(audioUrl);
+          if (!audioBuffer && this.arrayBufferCache.has(audioUrl)) {
+            try {
+              audioBuffer = await ctx.decodeAudioData(this.arrayBufferCache.get(audioUrl).slice(0));
+              if (playId !== this.currentPlayId) return;
+              if (audioBuffer) {
+                this.audioBufferCache.set(audioUrl, audioBuffer);
+              }
+            } catch (decodeErr) {
+              console.warn('Web Audio decode fallback:', decodeErr.message);
             }
-          } catch (decodeErr) {
-            console.warn('Web Audio decode fallback:', decodeErr.message);
           }
-        }
 
-        if (audioBuffer && audioBuffer.duration > 0) {
+          if (audioBuffer && audioBuffer.duration > 0) {
           // Wake cold OS/Bluetooth DAC with 60ms silent primer before scheduling short 0.1s clue
           let leadSec = 0.005;
           if (wasCold) {
@@ -352,6 +366,7 @@ class AudioCluePlayer {
           }, Math.ceil((leadSec + playDur + 0.4) * 1000));
 
           return;
+          }
         }
       }
 

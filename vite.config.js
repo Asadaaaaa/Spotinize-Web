@@ -3,10 +3,12 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
 
-const versionFile = path.resolve(__dirname, '../version.json');
+const publicVersionFile = path.resolve(__dirname, 'public/version.json');
+const rootVersionFile = path.resolve(__dirname, '../version.json');
+const versionFile = fs.existsSync(publicVersionFile) ? publicVersionFile : rootVersionFile;
 const versionMeta = fs.existsSync(versionFile)
   ? JSON.parse(fs.readFileSync(versionFile, 'utf8'))
-  : { version: 'v0.2.24112601', patchType: 'soft' };
+  : { version: 'v0.7.0', patchType: 'soft' };
 
 export default defineConfig({
   plugins: [react()],

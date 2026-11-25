@@ -35,10 +35,10 @@ export function GlobalLeaderboardPage({ currentUserId, onOpenPublicProfile }) {
   };
 
   const tabs = [
-    { id: 'alltime', label: 'All-Time', icon: <Trophy size={14} /> },
-    { id: 'daily', label: 'Daily', icon: <Zap size={14} /> },
-    { id: 'weekly', label: 'Weekly', icon: <Calendar size={14} /> },
-    { id: 'season', label: 'Ranked Season', icon: <Shield size={14} /> }
+    { id: 'alltime', label: 'All-Time', icon: <Trophy size={13} /> },
+    { id: 'daily', label: 'Daily', icon: <Zap size={13} /> },
+    { id: 'weekly', label: 'Weekly', icon: <Calendar size={13} /> },
+    { id: 'season', label: 'Ranked', icon: <Shield size={13} /> }
   ];
 
   const getScoreDisplay = (item) => {
@@ -61,18 +61,9 @@ export function GlobalLeaderboardPage({ currentUserId, onOpenPublicProfile }) {
   return (
     <div className="home-column-wrap mobile-page-container">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'nowrap', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '12px' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 style={{ fontSize: '1.6rem' }}>Leaderboard</h2>
-            <p style={{ fontSize: '0.86rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-              {boardType === 'alltime'
-                ? tx('Strict Power Score: Skill (65%) + Consistency (35%). Excludes Artist Mode.', 'Power Score Ketat: Skill (65%) + Konsistensi (35%). Mode Artist dikecualikan.')
-                : boardType === 'daily'
-                  ? tx('Today’s Spotinize Daily global & friends rankings.', 'Peringkat Spotinize Daily hari ini.')
-                  : boardType === 'weekly'
-                    ? tx('Resets every Monday 00:00 WIB.', 'Reset setiap Senin pukul 00:00 WIB.')
-                    : tx('Current Ranked Season RP standings.', 'Peringkat RP Season Ranked aktif.')}
-            </p>
           </div>
 
           <div className="segmented-pill" style={{ flexShrink: 0 }}>
@@ -94,20 +85,33 @@ export function GlobalLeaderboardPage({ currentUserId, onOpenPublicProfile }) {
         </div>
 
         {/* Board Tabs */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div
+          className="segmented-pill"
+          style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}
+        >
           {tabs.map(t => (
             <button
               key={t.id}
               type="button"
-              className={`btn btn-sm ${boardType === t.id ? 'btn-primary' : 'btn-secondary'}`}
+              className={`segmented-pill-btn ${boardType === t.id ? 'active' : ''}`}
               onClick={() => setBoardType(t.id)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              style={{ justifyContent: 'center', whiteSpace: 'nowrap', padding: '7px 6px' }}
             >
               {t.icon}
               <span>{t.label}</span>
             </button>
           ))}
         </div>
+
+        <p style={{ fontSize: '0.84rem', color: 'var(--color-text-muted)', marginTop: '-4px' }}>
+          {boardType === 'alltime'
+            ? tx('Strict Power Score: Skill (65%) + Consistency (35%).', 'Power Score Ketat: Skill (65%) + Konsistensi (35%).')
+            : boardType === 'daily'
+              ? tx('Today’s Spotinize Daily global & friends rankings.', 'Peringkat Spotinize Daily hari ini.')
+              : boardType === 'weekly'
+                ? tx('Resets every Monday 00:00 WIB.', 'Reset setiap Senin pukul 00:00 WIB.')
+                : tx('Current Ranked Season RP standings.', 'Peringkat RP Season Ranked aktif.')}
+        </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {loading ? (

@@ -49,10 +49,19 @@ export function useGame(gameId, user) {
 
   // Track if component is mounted to prevent stale setState
   const isMountedRef = useRef(true);
+  const gameStateRef = useRef(null);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
+
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
+  useEffect(() => {
+    hasPreloadedGameRef.current = false;
+  }, [gameId]);
 
   // Sync with audio player state
   useEffect(() => {
@@ -60,6 +69,7 @@ export function useGame(gameId, user) {
       if (isMountedRef.current) setIsPlayingAudio(playing);
     };
     return () => {
+      audioPlayer.onStateChange = null;
       audioPlayer.stop();
     };
   }, []);
@@ -89,12 +99,15 @@ export function useGame(gameId, user) {
     setIsAudioLoading(false);
   }, [stopTimer]);
 
+  const isGuestGame = String(gameId || '').startsWith('guest_daily_');
+  const gameApiPrefix = isGuestGame ? `/daily/guest/game/${gameId}` : `/game/${gameId}`;
+
   // Fetch initial game state
   const loadGame = useCallback(async () => {
-    if (!gameId || !user?.id) return null;
+    if (!gameId || (!user?.id && !isGuestGame)) return null;
     try {
       setLoading(true);
-      const state = await ApiClient.get(`/game/${gameId}`);
+      const state = await ApiClient.get(gameApiPrefix);
       if (!isMountedRef.current) return null;
       setGameState(state);
       if (state.player) {
@@ -109,7 +122,7 @@ export function useGame(gameId, user) {
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
-  }, [gameId, user?.id]);
+  }, [gameId, user?.id, isGuestGame, gameApiPrefix]);
 
   useEffect(() => {
     loadGame();
@@ -311,7 +324,7 @@ export function useGame(gameId, user) {
       if (!isMountedRef.current) return;
       setSpeedBuzzState(prev => ({ ...prev, countdown: 0 }));
       setRevealLevel(nextLvl);
-      const trackId = gameState?.currentTrack?.id;
+      const trackId = gameStateRef.current?.currentTrack?.id;
       if (trackId) {
         audioPlayer.playClue(`/api/audio/clue/${trackId}?duration=${nextLvl}`, nextLvl).catch(() => {});
       }
@@ -408,7 +421,7 @@ export function useGame(gameId, user) {
 
     if (!isTimerRunning && roundStatus === 'THINKING') {
       startTimer();
-      ApiClient.post(`/game/${gameId}/timer/start`).catch(() => {});
+      ApiClient.post(`${gameApiPrefix}/timer/start`).catch(() => {});
     }
 
     const clueAudioUrl = `/api/audio/clue/${gameState.currentTrack.id}?duration=${revealLevel}`;
@@ -433,7 +446,7 @@ export function useGame(gameId, user) {
     haptics.revealNext();
 
     try {
-      const res = await ApiClient.post(`/game/${gameId}/reveal`);
+      const res = await ApiClient.post(`${gameApiPrefix}/reveal`);
       const nextLevel = res.player?.currentRevealLevel || revealLevel;
       setRevealLevel(nextLevel);
 
@@ -463,7 +476,7 @@ export function useGame(gameId, user) {
     audioPlayer.stop();
 
     try {
-      const res = await ApiClient.post(`/game/${gameId}/guess`, {
+      const res = await ApiClient.post(`${gameApiPrefix}/guess`, {
         track: selectedTrack
       });
 
@@ -524,7 +537,7 @@ export function useGame(gameId, user) {
     stopTimer();
 
     try {
-      const res = await ApiClient.post(`/game/${gameId}/skip`);
+      const res = await ApiClient.post(`${gameApiPrefix}/skip`);
       setRoundStatus('SKIPPED');
       setRemainingAttempts(0);
       setRevealedTrack(res.targetTrack);
@@ -544,7 +557,7 @@ export function useGame(gameId, user) {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const newState = await ApiClient.post(`/game/${gameId}/next`);
+        const newState = await ApiClient.post(`${gameApiPrefix}/next`);
         if (!isMountedRef.current) return;
         setGameState(newState);
 

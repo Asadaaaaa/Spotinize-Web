@@ -28,6 +28,7 @@ export function AppShell({
   children
 }) {
   const { user, logout } = useAuth();
+  const displayUser = user || { displayName: 'Guest', username: 'guest' };
   const { lang, toggleLang, t, tx } = useLanguage();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -89,7 +90,7 @@ export function AppShell({
     { id: 'leaderboard', label: t('navRank'), icon: Trophy }
   ];
 
-  const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v0.6.0';
+  const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v0.7.0';
   const effectivePercent = muted ? 0 : Math.round(volume * 100);
 
   const renderUserMenuContent = (closeMenu, isMobile = false) => (
@@ -220,7 +221,17 @@ export function AppShell({
             )}
           </button>
 
-          {/* Mobile User Chip Dropdown */}
+          {/* Mobile User Chip Dropdown (hidden for Guest -> show Register CTA) */}
+          {!user?.id ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'))}
+              style={{ padding: '6px 12px', fontSize: '0.76rem', fontWeight: 800, borderRadius: 'var(--radius-full)' }}
+            >
+              {tx('Register', 'Daftar')}
+            </button>
+          ) : (
           <div ref={mobileMenuRef} style={{ position: 'relative' }}>
             <button
               type="button"
@@ -229,14 +240,14 @@ export function AppShell({
               aria-label={t('navProfile')}
             >
               <Avatar
-                src={user?.avatarUrl}
-                alt={user?.displayName}
-                seed={user?.id || user?.displayName}
-                frame={user?.equippedFrame}
+                src={displayUser?.avatarUrl}
+                alt={displayUser?.displayName}
+                seed={displayUser?.id || displayUser?.displayName}
+                frame={displayUser?.equippedFrame}
                 style={{ width: '26px', height: '26px' }}
               />
               <span className="mobile-user-chip-name">
-                {user?.displayName?.split(' ')[0]}
+                {displayUser?.displayName?.split(' ')[0]}
               </span>
               <ChevronDown
                 size={13}
@@ -317,6 +328,7 @@ export function AppShell({
               </div>
             )}
           </div>
+          )}
         </div>
       </header>
 
@@ -385,17 +397,20 @@ export function AppShell({
               </button>
             </div>
 
-            {/* Primary + Post CTA */}
-            <button
-              type="button"
-              className="btn btn-primary sidebar-post-btn"
-              onClick={() => onOpenComposer?.()}
-            >
-              <Plus size={19} strokeWidth={2.8} />
-              <span>{t('navPost')}</span>
-            </button>
+            {/* Primary + Post CTA (hidden for Guest) */}
+            {user?.id && (
+              <button
+                type="button"
+                className="btn btn-primary sidebar-post-btn"
+                onClick={() => onOpenComposer?.()}
+              >
+                <Plus size={19} strokeWidth={2.8} />
+                <span>{t('navPost')}</span>
+              </button>
+            )}
 
-            {/* Bottom User Chip */}
+            {/* Bottom User Chip (hidden for Guest) */}
+            {user?.id && (
             <div ref={userMenuRef} className="sidebar-user-chip-wrap">
               {isUserMenuOpen && (
                 <div className="sidebar-user-popover">
@@ -465,6 +480,7 @@ export function AppShell({
                 />
               </button>
             </div>
+            )}
           </div>
         </aside>
 
@@ -485,6 +501,7 @@ export function AppShell({
               />
             </div>
 
+            {user?.id && (
             <button
               type="button"
               className="sidebar-wallet-floating"
@@ -506,6 +523,7 @@ export function AppShell({
                 <span>{user?.streakFreezes || 0}/2</span>
               </span>
             </button>
+            )}
           </div>
         </aside>
       </div>

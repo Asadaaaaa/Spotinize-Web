@@ -12,7 +12,11 @@ export function FollowingActivityCard({ user, onOpenPublicProfile, onNavigateFri
   const [loading, setLoading] = useState(true);
 
   const loadActivity = useCallback(async (silent = false) => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setActivity([]);
+      setLoading(false);
+      return;
+    }
     if (!silent) setLoading(true);
     try {
       const res = await ApiClient.get('/follows/activity');
@@ -55,7 +59,22 @@ export function FollowingActivityCard({ user, onOpenPublicProfile, onNavigateFri
         )}
       </div>
 
-      {loading ? (
+      {!user?.id ? (
+        <div style={{ textAlign: 'center', padding: '14px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+          <Users size={22} style={{ opacity: 0.5, color: 'var(--color-primary)' }} />
+          <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', lineHeight: 1.45 }}>
+            {tx('Register a free account to follow players and duel friends.', 'Daftar akun gratis untuk follow pemain dan mabar bareng teman.')}
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'))}
+            style={{ fontWeight: 800, padding: '6px 14px', fontSize: '0.76rem' }}
+          >
+            {tx('Register Account', 'Daftar Akun')}
+          </button>
+        </div>
+      ) : loading ? (
         <FriendActivitySkeleton count={5} />
       ) : activity.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '14px 6px', color: 'var(--color-text-dim)', fontSize: '0.8rem', lineHeight: 1.45 }}>

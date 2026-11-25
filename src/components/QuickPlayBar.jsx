@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   User, Users, Globe2, Radio, Library, Mic2, Play, Plus, LogIn,
   Loader2, Search, Check, X, History, Disc3, Calendar, ChevronDown, ChevronUp,
-  Sparkles, Shield, Swords, Copy
+  Sparkles, Shield, Swords, Copy, Clock
 } from 'lucide-react';
 import Button from './Button.jsx';
 import { RankedTierBadge } from './ItemRarityBadge.jsx';
 import ApiClient from '../services/api.js';
+import { useAuth } from '../hooks/useAuth.jsx';
 import { useLanguage } from '../hooks/useLanguage.jsx';
 
 const POPULAR_ARTISTS = [
@@ -24,7 +25,9 @@ const MP_MODES = [
 ];
 
 export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
+  const { hasGuestPlayedDaily } = useAuth();
   const { t, tx } = useLanguage();
+  const isGuestMode = !user?.id;
 
   const localizedCategories = [
     { id: 'Global Trends', name: 'Global Trends', desc: tx('Most popular songs on global charts', 'Lagu-lagu terpopuler di chart dunia'), icon: <Globe2 size={18} /> },
@@ -58,11 +61,13 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
     };
   });
 
-  const [playTab, setPlayTab] = useState('CLASSIC'); // 'CLASSIC' | 'DAILY' | 'RANKED'
+  const [playTab, setPlayTab] = useState(() => (user?.id ? 'CLASSIC' : 'DAILY')); // 'CLASSIC' | 'DAILY' | 'RANKED'
   const [mode, setMode] = useState('SOLO'); // 'SOLO' | 'MULTIPLAYER'
   const [multiplayerAction, setMultiplayerAction] = useState('CREATE'); // 'CREATE' | 'JOIN'
   const [mpSubtype, setMpSubtype] = useState('CLASSIC');
   const [dailyStatus, setDailyStatus] = useState(null);
+  const [guestDailyStatus, setGuestDailyStatus] = useState(null);
+  const [dailyResetCountdown, setDailyResetCountdown] = useState('');
   const [rankedData, setRankedData] = useState(null);
   const [dailyCopied, setDailyCopied] = useState(false);
   const [startingSpecial, setStartingSpecial] = useState(null);
@@ -178,6 +183,10 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
   };
 
   const handleStartSolo = async () => {
+    if (isGuestMode) {
+      window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'));
+      return;
+    }
     if (!isCategoryReady) return;
     try {
       setLoading(true);
@@ -197,16 +206,35 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
   };
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      ApiClient.get('/daily/guest/status').then(setGuestDailyStatus).catch(() => {});
+      return;
+    }
     ApiClient.get('/daily/status').then(setDailyStatus).catch(() => {});
     ApiClient.get('/ranked/summary').then(setRankedData).catch(() => {});
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!isGuestMode) return;
+    const updateCountdown = () => {
+      const remMs = 86400000 - ((Date.now() + 7 * 3600 * 1000) % 86400000);
+      const totalSec = Math.max(0, Math.floor(remMs / 1000));
+      const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+      const s = String(totalSec % 60).padStart(2, '0');
+      setDailyResetCountdown(`${h}:${m}:${s}`);
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [isGuestMode]);
 
   const handlePlayDaily = async () => {
     try {
       setStartingSpecial('daily');
       setError(null);
-      const res = await ApiClient.post('/daily/play');
+      const endpoint = isGuestMode ? '/daily/guest/play' : '/daily/play';
+      const res = await ApiClient.post(endpoint);
       if (res?.gameState) onGameCreated(res.gameState);
     } catch (err) {
       setError(err.message);
@@ -216,6 +244,10 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
   };
 
   const handlePlayRanked = async () => {
+    if (isGuestMode) {
+      window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'));
+      return;
+    }
     try {
       setStartingSpecial('ranked');
       setError(null);
@@ -242,6 +274,10 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
   };
 
   const handleCreateRoom = async () => {
+    if (isGuestMode) {
+      window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'));
+      return;
+    }
     if (!isCategoryReady) return;
     try {
       setLoading(true);
@@ -263,6 +299,10 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
 
   const handleJoinByCode = async (e) => {
     e.preventDefault();
+    if (isGuestMode) {
+      window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'));
+      return;
+    }
     if (!joinCode.trim()) return;
     try {
       setLoading(true);
@@ -341,55 +381,69 @@ export function QuickPlayBar({ user, onGameCreated, onJoinRoom }) {
       {!collapsed && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {/* TAB 2: SPOTINIZE DAILY */}
-          {playTab === 'DAILY' && (
-            <div style={{
-              padding: '16px',
-              borderRadius: '14px',
-              backgroundColor: '#14141b',
-              border: '1px solid rgba(29, 185, 84, 0.35)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '200px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '1.05rem', fontWeight: 900, color: 'var(--color-text-bright)' }}>
-                    <span>Spotinize Daily #{dailyStatus?.dailyNumber || '—'}</span>
+          {playTab === 'DAILY' && (() => {
+            const activeDaily = isGuestMode ? guestDailyStatus : dailyStatus;
+            const guestUsed = isGuestMode && (guestDailyStatus?.hasPlayedDaily || hasGuestPlayedDaily) && !guestDailyStatus?.canResume;
+            return (
+              <div style={{
+                padding: '16px',
+                borderRadius: '14px',
+                backgroundColor: '#14141b',
+                border: '1px solid rgba(29, 185, 84, 0.35)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '1.05rem', fontWeight: 900, color: 'var(--color-text-bright)' }}>
+                      <span>Spotinize Daily #{activeDaily?.dailyNumber || '—'}</span>
+                    </div>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                      {tx(
+                        '5 full-random songs · 1 try/day · Reset 00:00 WIB',
+                        '5 lagu acak penuh · 1x main/hari · Reset 00:00 WIB'
+                      )}
+                      {!isGuestMode && typeof dailyStatus?.participantCount === 'number' && (
+                        <> · {dailyStatus.participantCount} {tx('played', 'main')}</>
+                      )}
+                    </p>
                   </div>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                    {tx(
-                      '5 full-random songs · 1 try/day · Reset 00:00 WIB',
-                      '5 lagu acak penuh · 1x main/hari · Reset 00:00 WIB'
-                    )}
-                    {typeof dailyStatus?.participantCount === 'number' && (
-                      <> · {dailyStatus.participantCount} {tx('played', 'main')}</>
-                    )}
-                  </p>
-                </div>
 
-                {dailyStatus?.status === 'COMPLETED' ? (
-                  <span className="badge badge-green" style={{ fontSize: '0.78rem', padding: '5px 10px', flexShrink: 0 }}>
-                    {tx(`Done · ${dailyStatus.score} pts (#${dailyStatus.rank || '-'})`, `Selesai · ${dailyStatus.score} pts (#${dailyStatus.rank || '-'})`)}
-                  </span>
-                ) : (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    disabled={startingSpecial === 'daily'}
-                    onClick={handlePlayDaily}
-                    icon={startingSpecial === 'daily' ? <Loader2 size={15} className="spin" /> : <Play size={15} fill="#000" />}
-                    style={{ padding: '9px 18px', fontWeight: 800, flexShrink: 0 }}
-                  >
-                    {startingSpecial === 'daily'
-                      ? tx('Starting...', 'Memulai...')
-                      : dailyStatus?.status === 'IN_PROGRESS'
-                        ? tx('Resume Daily', 'Lanjutkan Daily')
-                        : tx('Play Daily', 'Mainkan Daily')}
-                  </Button>
-                )}
+                  {guestUsed ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled
+                      icon={<Clock size={14} />}
+                      style={{ padding: '9px 16px', fontWeight: 800, fontFamily: 'var(--font-mono)', flexShrink: 0, opacity: 0.75 }}
+                    >
+                      {dailyResetCountdown || '00:00:00'}
+                    </Button>
+                  ) : dailyStatus?.status === 'COMPLETED' ? (
+                    <span className="badge badge-green" style={{ fontSize: '0.78rem', padding: '5px 10px', flexShrink: 0 }}>
+                      {tx(`Done · ${dailyStatus.score} pts (#${dailyStatus.rank || '-'})`, `Selesai · ${dailyStatus.score} pts (#${dailyStatus.rank || '-'})`)}
+                    </span>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={startingSpecial === 'daily'}
+                      onClick={handlePlayDaily}
+                      icon={startingSpecial === 'daily' ? <Loader2 size={15} className="spin" /> : <Play size={15} fill="#000" />}
+                      style={{ padding: '9px 18px', fontWeight: 800, flexShrink: 0 }}
+                    >
+                      {startingSpecial === 'daily'
+                        ? tx('Starting...', 'Memulai...')
+                        : activeDaily?.status === 'IN_PROGRESS'
+                          ? tx('Resume Daily', 'Lanjutkan Daily')
+                          : tx('Play Daily', 'Mainkan Daily')}
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* TAB 3: SOLO RANKED */}
           {playTab === 'RANKED' && (

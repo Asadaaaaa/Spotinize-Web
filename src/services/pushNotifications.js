@@ -74,6 +74,8 @@ class PushNotificationService {
       if (reg && typeof reg.showNotification === 'function') {
         await reg.showNotification(title || 'Spotinize', {
           body: body || '',
+          icon: '/spotinize-logo.png',
+          badge: '/favicon.png',
           tag,
           renotify: true,
           data: { url }
@@ -83,6 +85,7 @@ class PushNotificationService {
 
       const n = new Notification(title || 'Spotinize', {
         body: body || '',
+        icon: '/spotinize-logo.png',
         tag
       });
       n.onclick = () => {

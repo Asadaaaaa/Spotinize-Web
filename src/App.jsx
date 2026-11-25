@@ -17,6 +17,9 @@ import SavedSongsModal from './components/SavedSongsModal.jsx';
 import DailyLoginModal from './components/DailyLoginModal.jsx';
 import QuestsModal from './components/QuestsModal.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
+import StreakCelebrationModal from './components/StreakCelebrationModal.jsx';
+import StreakReminderModal from './components/StreakReminderModal.jsx';
+import AuthModal from './components/AuthModal.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
 import { useDialog } from './hooks/useDialog.jsx';
 import { useLanguage } from './hooks/useLanguage.jsx';
@@ -98,8 +101,7 @@ function clearActiveSession() {
 }
 
 export function App() {
-  useVersionCheck();
-  const { user, rawUser, refreshUser, isAuthChecking } = useAuth();
+  const { user, rawUser, isGuest, refreshUser, isAuthChecking } = useAuth();
   const { showAlert, showConfirm } = useDialog();
   const { tx } = useLanguage();
   const [currentTab, setCurrentTab] = useState(() => {
@@ -110,6 +112,12 @@ export function App() {
   const [activeGameId, setActiveGameId] = useState(null);
   const [isActiveGameFinished, setIsActiveGameFinished] = useState(false);
   const [lobbyGame, setLobbyGame] = useState(null);
+
+  const isInGame = Boolean(
+    (currentTab === 'game' && activeGameId) ||
+    (currentTab === 'room-lobby' && lobbyGame)
+  );
+  useVersionCheck({ isInGame });
   const [authError, setAuthError] = useState(null);
   const [authModal, setAuthModal] = useState(null); // 'LOGIN' | 'REGISTER' | null
   const [publicProfileUsername, setPublicProfileUsername] = useState(() => {
@@ -130,10 +138,18 @@ export function App() {
   const [isDailyLoginOpen, setIsDailyLoginOpen] = useState(false);
   const [isQuestsOpen, setIsQuestsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isStreakReminderOpen, setIsStreakReminderOpen] = useState(false);
+  const [streakCelebration, setStreakCelebration] = useState({ open: false, newStreak: 1, previousStreak: 0 });
+  const [guestAuthMode, setGuestAuthMode] = useState(null);
+  const [gamificationLoaded, setGamificationLoaded] = useState(false);
+  const [quickPlayingStreak, setQuickPlayingStreak] = useState(false);
   const [canClaimDailyLogin, setCanClaimDailyLogin] = useState(false);
   const [claimableQuestsCount, setClaimableQuestsCount] = useState(0);
   const [latestCreatedPost, setLatestCreatedPost] = useState(null);
   const autoPromptedDailyUserRef = useRef(null);
+  const pendingStreakReminderAfterDailyRef = useRef(false);
+  const prevStreakRef = useRef({ userId: null, currentStreak: 0, streakLitToday: false });
+  const wasOfflineRef = useRef(false);
 
   const currentUser = user || rawUser;
 
@@ -187,7 +203,7 @@ export function App() {
 
   // Redirect logged-out users away from protected routes back to '/'
   useEffect(() => {
-    if (isAuthChecking || currentUser) return;
+    if (isAuthChecking || currentUser || isGuest) return;
     const path = window.location.pathname;
     const isProtectedPath =
       path === '/main' ||
@@ -211,7 +227,7 @@ export function App() {
       setCurrentTab('landing');
       window.history.replaceState({}, '', '/');
     }
-  }, [currentUser, isAuthChecking]);
+  }, [currentUser, isGuest, isAuthChecking]);
 
   // Load user notifications
   const loadNotifications = useCallback(async () => {
@@ -223,17 +239,22 @@ export function App() {
     } catch (e) {}
   }, [currentUser?.id, isAuthChecking]);
 
-  const loadGamificationBadges = useCallback(async () => {
-    if (isAuthChecking || !currentUser?.id) return;
+  const loadGamificationBadges = useCallback(async (force = false) => {
+    if (isAuthChecking || !currentUser?.id) return null;
     try {
       const [dlRes, qRes] = await Promise.all([
-        ApiClient.get('/daily-login/status').catch(() => null),
-        ApiClient.get('/quests').catch(() => null)
+        ApiClient.get('/daily-login/status', { force }).catch(() => null),
+        ApiClient.get('/quests', { force }).catch(() => null)
       ]);
-      setCanClaimDailyLogin(Boolean(dlRes?.canClaimToday));
+      const canClaim = Boolean(dlRes?.canClaimToday);
+      setCanClaimDailyLogin(canClaim);
       const allQuests = [...(qRes?.daily || []), ...(qRes?.weekly || [])];
       setClaimableQuestsCount(allQuests.filter(q => q.status === 'COMPLETED').length);
-    } catch (e) {}
+      setGamificationLoaded(true);
+      return { canClaim };
+    } catch (e) {
+      return null;
+    }
   }, [currentUser?.id, isAuthChecking]);
 
   useEffect(() => {
@@ -242,21 +263,116 @@ export function App() {
     loadGamificationBadges();
   }, [loadNotifications, loadGamificationBadges, isAuthChecking]);
 
-  // Auto-open Daily Login popup on every visit or refresh when today's reward is unclaimed
+  // Listen for guest register modal CTA trigger
   useEffect(() => {
-    if (!currentUser?.id) {
+    const handleOpenGuestUpgrade = () => setGuestAuthMode('REGISTER');
+    window.addEventListener('spotinize:open-guest-upgrade', handleOpenGuestUpgrade);
+    return () => window.removeEventListener('spotinize:open-guest-upgrade', handleOpenGuestUpgrade);
+  }, []);
+
+  // Detect Streak Increment -> Open Duolingo-style Animated Streak Calendar Modal
+  useEffect(() => {
+    if (!currentUser?.id || isGuest) {
+      prevStreakRef.current = { userId: null, currentStreak: 0, streakLitToday: false };
+      return;
+    }
+
+    const prev = prevStreakRef.current;
+    const nextStreak = Number(currentUser.currentStreak || 0);
+    const nextLit = Boolean(currentUser.streakLitToday);
+
+    if (prev.userId === currentUser.id) {
+      const justLitToday = !prev.streakLitToday && nextLit && nextStreak >= 1;
+      const streakIncreased = nextStreak > prev.currentStreak && nextStreak >= 1;
+      if (justLitToday || streakIncreased) {
+        setStreakCelebration({
+          open: true,
+          newStreak: nextStreak,
+          previousStreak: prev.currentStreak
+        });
+      }
+    }
+
+    prevStreakRef.current = {
+      userId: currentUser.id,
+      currentStreak: nextStreak,
+      streakLitToday: nextLit
+    };
+  }, [currentUser?.id, currentUser?.currentStreak, currentUser?.streakLitToday, isGuest]);
+
+  const triggerEntryModals = useCallback(({ canClaim, streakLit }) => {
+    if (!currentUser?.id || isGuest || isInGame) return;
+    if (!publicProfileUsername && currentTab === 'landing') return;
+
+    if (canClaim) {
+      pendingStreakReminderAfterDailyRef.current = !streakLit;
+      setIsDailyLoginOpen(true);
+    } else if (!streakLit) {
+      pendingStreakReminderAfterDailyRef.current = false;
+      setIsStreakReminderOpen(true);
+    }
+  }, [currentUser?.id, isGuest, isInGame, publicProfileUsername, currentTab]);
+
+  // Auto-open Daily Login / Streak Reminder on initial visit when unclaimed or streak unlit
+  useEffect(() => {
+    if (!publicProfileUsername && currentTab === 'landing') {
+      setIsDailyLoginOpen(false);
+      setIsStreakReminderOpen(false);
+      return;
+    }
+    if (!currentUser?.id || isGuest) {
       autoPromptedDailyUserRef.current = null;
+      setGamificationLoaded(false);
       return;
     }
-    if (isAuthChecking || !canClaimDailyLogin) return;
-    if (!publicProfileUsername && (currentTab === 'landing' || currentTab === 'game' || currentTab === 'room-lobby')) {
-      return;
-    }
+    if (isAuthChecking || !gamificationLoaded || isInGame) return;
+
     if (autoPromptedDailyUserRef.current !== currentUser.id) {
       autoPromptedDailyUserRef.current = currentUser.id;
-      setIsDailyLoginOpen(true);
+      triggerEntryModals({
+        canClaim: canClaimDailyLogin,
+        streakLit: Boolean(currentUser.streakLitToday)
+      });
     }
-  }, [currentUser?.id, isAuthChecking, canClaimDailyLogin, currentTab, publicProfileUsername]);
+  }, [currentUser?.id, currentUser?.streakLitToday, isGuest, isAuthChecking, gamificationLoaded, canClaimDailyLogin, isInGame, currentTab, publicProfileUsername, triggerEntryModals]);
+
+  // Re-trigger Daily Login / Streak Reminder when returning from offline -> online
+  useEffect(() => {
+    if (!currentUser?.id || isGuest) return;
+    const socket = socketService.getSocket();
+
+    const markOffline = () => {
+      wasOfflineRef.current = true;
+    };
+
+    const handleBackOnline = async () => {
+      if (!wasOfflineRef.current) return;
+      wasOfflineRef.current = false;
+      const [dlState] = await Promise.all([
+        loadGamificationBadges(true),
+        refreshUser?.()
+      ]);
+      const latestUser = (() => {
+        try { return JSON.parse(localStorage.getItem('spotinize_user') || 'null'); } catch { return null; }
+      })();
+      triggerEntryModals({
+        canClaim: dlState ? dlState.canClaim : canClaimDailyLogin,
+        streakLit: Boolean(latestUser?.streakLitToday ?? currentUser?.streakLitToday)
+      });
+    };
+
+    window.addEventListener('offline', markOffline);
+    window.addEventListener('online', handleBackOnline);
+    socket.on('disconnect', markOffline);
+    socket.on('connect', handleBackOnline);
+
+    return () => {
+      window.removeEventListener('offline', markOffline);
+      window.removeEventListener('online', handleBackOnline);
+      socket.off('disconnect', markOffline);
+      socket.off('connect', handleBackOnline);
+    };
+  }, [currentUser?.id, currentUser?.streakLitToday, isGuest, loadGamificationBadges, refreshUser, triggerEntryModals, canClaimDailyLogin]);
 
   // Real-time Personal WebSocket Notifications & Invites (re-registers on reconnect)
   useEffect(() => {
@@ -274,6 +390,7 @@ export function App() {
     }
 
     const handleInviteReceived = (inviteData) => {
+      ApiClient.invalidateCache(['/feed', '/friends', '/follows']);
       setActiveToastInvite(inviteData);
       loadNotifications();
       soundFx.playNotif();
@@ -287,6 +404,7 @@ export function App() {
     };
 
     const handleNotificationNew = (notifData) => {
+      ApiClient.invalidateCache(['/feed', '/friends', '/follows']);
       loadNotifications();
       soundFx.playNotif();
       haptics.tap();
@@ -524,7 +642,28 @@ export function App() {
 
   const handleGameFinished = useCallback(() => {
     setIsActiveGameFinished(true);
-  }, []);
+    setTimeout(() => {
+      refreshUser?.();
+      loadGamificationBadges(true);
+    }, 600);
+  }, [refreshUser, loadGamificationBadges]);
+
+  const handleQuickPlayForStreak = useCallback(async () => {
+    if (quickPlayingStreak) return;
+    try {
+      setQuickPlayingStreak(true);
+      const res = await ApiClient.post('/game/solo/create', {
+        category: 'Global Trends',
+        numberOfSongs: 5
+      });
+      setIsStreakReminderOpen(false);
+      handleGameCreated(res);
+    } catch (err) {
+      showAlert?.(err.message || tx('Failed to start game', 'Gagal memulai game'));
+    } finally {
+      setQuickPlayingStreak(false);
+    }
+  }, [quickPlayingStreak, handleGameCreated, showAlert, tx]);
 
   const handleNavigateToPublicProfile = (username) => {
     setPublicProfileUsername(username);
@@ -533,7 +672,7 @@ export function App() {
 
   const handleExitPublicProfile = () => {
     setPublicProfileUsername(null);
-    if (!currentUser) {
+    if (!currentUser && !isGuest) {
       window.history.pushState({}, '', '/');
       setCurrentTab('landing');
     } else {
@@ -590,8 +729,8 @@ export function App() {
       return renderLanding();
     }
 
-    // Not logged in -> Landing page
-    if (!currentUser) {
+    // Not logged in and not in Guest trial -> Landing page
+    if (!currentUser && !isGuest) {
       return renderLanding();
     }
 
@@ -618,6 +757,31 @@ export function App() {
     }
 
     if (currentTab === 'profile') {
+      if (isGuest) {
+        return (
+          <div className="home-column-wrap mobile-page-container" style={{ paddingTop: '24px' }}>
+            <div className="card" style={{ padding: '28px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 900, margin: 0 }}>
+                {tx('Guest Mode — No Profile Yet', 'Mode Guest — Belum Ada Profil')}
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', maxWidth: '380px', margin: 0 }}>
+                {tx(
+                  'Register a free account to build your music profile, track streaks, unlock achievements, and collect cosmetics.',
+                  'Daftar akun gratis untuk membuat profil musikmu, simpan streak, raih achievement, dan koleksi kosmetik.'
+                )}
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setGuestAuthMode('REGISTER')}
+                style={{ fontWeight: 800, padding: '8px 18px', marginTop: '4px' }}
+              >
+                {tx('Register Account', 'Daftar Akun')}
+              </button>
+            </div>
+          </div>
+        );
+      }
       return (
         <ProfilePage
           user={currentUser}
@@ -640,6 +804,31 @@ export function App() {
     }
 
     if (currentTab === 'friends') {
+      if (isGuest) {
+        return (
+          <div className="home-column-wrap mobile-page-container" style={{ paddingTop: '24px' }}>
+            <div className="card" style={{ padding: '28px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 900, margin: 0 }}>
+                {tx('Account Required for Friends', 'Perlu Akun untuk Fitur Teman')}
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', maxWidth: '380px', margin: 0 }}>
+                {tx(
+                  'Register a free account to follow players, invite friends, and play real-time Multiplayer duels.',
+                  'Daftar akun gratis untuk follow pemain, undang teman, dan main duel Multiplayer.'
+                )}
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setGuestAuthMode('REGISTER')}
+                style={{ fontWeight: 800, padding: '8px 18px', marginTop: '4px' }}
+              >
+                {tx('Register Account', 'Daftar Akun')}
+              </button>
+            </div>
+          </div>
+        );
+      }
       return (
         <FriendsPage
           user={currentUser}
@@ -676,6 +865,10 @@ export function App() {
   };
 
   const handleOpenComposer = (initialTrack = null) => {
+    if (isGuest || !currentUser?.id) {
+      setGuestAuthMode('REGISTER');
+      return;
+    }
     setComposerInitialTrack(initialTrack);
     setIsComposerOpen(true);
   };
@@ -732,7 +925,7 @@ export function App() {
       setPublicProfileUsername(null);
     }
 
-    const nextTab = !currentUser && tab !== 'landing' ? 'landing' : tab;
+    const nextTab = (!currentUser && !isGuest) && tab !== 'landing' ? 'landing' : tab;
     const targetPath = getPathForTab(nextTab);
     if (window.location.pathname !== targetPath) {
       window.history.pushState({}, '', targetPath);
@@ -745,7 +938,7 @@ export function App() {
     : currentTab;
 
   const useThreeColumnShell = Boolean(
-    currentUser &&
+    (currentUser || isGuest) &&
     (publicProfileUsername || currentTab !== 'landing')
   );
 
@@ -778,6 +971,7 @@ export function App() {
             currentTab={activeNavTab}
             unreadCount={unreadCount}
             hideNavLinks={currentTab === 'landing'}
+            isLanding={currentTab === 'landing' || (!currentUser && !publicProfileUsername)}
             onOpenNotifications={() => {
               setIsNotificationOpen(true);
               loadNotifications();
@@ -848,12 +1042,44 @@ export function App() {
 
       {/* Weekly AI Daily Login Modal */}
       <DailyLoginModal
-        isOpen={isDailyLoginOpen}
-        onClose={() => setIsDailyLoginOpen(false)}
+        isOpen={useThreeColumnShell && isDailyLoginOpen}
+        onClose={() => {
+          setIsDailyLoginOpen(false);
+          if (pendingStreakReminderAfterDailyRef.current) {
+            pendingStreakReminderAfterDailyRef.current = false;
+            if (!isGuest && !currentUser?.streakLitToday && !isInGame && currentTab !== 'landing') {
+              setIsStreakReminderOpen(true);
+            }
+          }
+        }}
         onClaimed={() => {
           refreshUser?.();
-          loadGamificationBadges();
+          loadGamificationBadges(true);
         }}
+      />
+
+      {/* Streak Increment Calendar Celebration Modal */}
+      <StreakCelebrationModal
+        isOpen={useThreeColumnShell && streakCelebration.open}
+        onClose={() => setStreakCelebration(prev => ({ ...prev, open: false }))}
+        newStreak={streakCelebration.newStreak}
+        previousStreak={streakCelebration.previousStreak}
+      />
+
+      {/* Streak Unlit Reminder Modal (after Daily Login or if streak not lit yet) */}
+      <StreakReminderModal
+        isOpen={useThreeColumnShell && isStreakReminderOpen}
+        onClose={() => setIsStreakReminderOpen(false)}
+        currentStreak={currentUser?.currentStreak || 0}
+        onPlayNow={handleQuickPlayForStreak}
+        startingGame={quickPlayingStreak}
+      />
+
+      {/* Shared Register / Login CTA Modal */}
+      <AuthModal
+        mode={guestAuthMode}
+        onChangeMode={setGuestAuthMode}
+        onClose={() => setGuestAuthMode(null)}
       />
 
       {/* Daily & Weekly Quests Modal */}

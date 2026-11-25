@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 
-const CURRENT_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v0.2.24112601';
+const CURRENT_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v0.7.0';
 const CHECK_INTERVAL_MS = 60 * 1000;
 
 async function clearBrowserCaches() {
@@ -23,8 +23,26 @@ async function clearBrowserCaches() {
   }
 }
 
-export function useVersionCheck() {
+export function useVersionCheck({ isInGame = false } = {}) {
   const reloadingRef = useRef(false);
+  const isInGameRef = useRef(isInGame);
+  const pendingVersionRef = useRef(null);
+
+  const triggerHardReload = useCallback(async (targetVersion) => {
+    if (reloadingRef.current || !targetVersion) return;
+    reloadingRef.current = true;
+    await clearBrowserCaches();
+    const url = new URL(window.location.href);
+    url.searchParams.set('v', targetVersion);
+    window.location.replace(url.toString());
+  }, []);
+
+  useEffect(() => {
+    isInGameRef.current = isInGame;
+    if (!isInGame && pendingVersionRef.current && !reloadingRef.current) {
+      triggerHardReload(pendingVersionRef.current);
+    }
+  }, [isInGame, triggerHardReload]);
 
   useEffect(() => {
     let active = true;
@@ -41,13 +59,19 @@ export function useVersionCheck() {
         const remote = await res.json();
         if (!remote?.version || remote.version === CURRENT_VERSION) return;
 
-        // Hard patch: clear caches and force-reload to the latest version
-        if (remote.patchType === 'hard') {
-          reloadingRef.current = true;
-          await clearBrowserCaches();
-          const url = new URL(window.location.href);
-          url.searchParams.set('v', remote.version);
-          window.location.replace(url.toString());
+        const isLevel2All = remote.patchType === 'hard_all' || remote.patchLevel === 2;
+        const isLevel1Hard = remote.patchType === 'hard' || remote.patchLevel === 1;
+
+        if (isLevel2All) {
+          // Level 2: Force reload ALL users immediately (including users in-game)
+          await triggerHardReload(remote.version);
+        } else if (isLevel1Hard) {
+          // Level 1: Auto-reload immediately, or defer until active game finishes
+          if (isInGameRef.current) {
+            pendingVersionRef.current = remote.version;
+          } else {
+            await triggerHardReload(remote.version);
+          }
         }
         // Soft patch: do not auto-refresh; user gets the update on their next manual refresh
       } catch (e) {
@@ -70,7 +94,7 @@ export function useVersionCheck() {
       clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []);
+  }, [triggerHardReload]);
 
   return CURRENT_VERSION;
 }

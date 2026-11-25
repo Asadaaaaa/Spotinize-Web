@@ -728,53 +728,65 @@ export function ProfilePage({
 
       {/* 2. TABS BELOW: POST, ACHIEVEMENTS, LOCKER, SAVES, HISTORY */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div className="friend-tabs">
+        <div className="profile-tabs-bar" role="tablist">
           <button
             type="button"
-            className={`btn btn-sm friend-tab-btn ${activeTab === 'posts' ? 'btn-primary' : 'btn-secondary'}`}
+            role="tab"
+            aria-selected={activeTab === 'posts'}
+            className={`profile-tab-item ${activeTab === 'posts' ? 'active' : ''}`}
             onClick={() => setActiveTab('posts')}
           >
             <MessageSquare size={14} />
-            <span>{tx('Post', 'Post')} ({userPosts.length})</span>
+            <span>{tx('Post', 'Post')}</span>
           </button>
           <button
             type="button"
-            className={`btn btn-sm friend-tab-btn ${activeTab === 'achievements' ? 'btn-primary' : 'btn-secondary'}`}
+            role="tab"
+            aria-selected={activeTab === 'achievements'}
+            className={`profile-tab-item ${activeTab === 'achievements' ? 'active' : ''}`}
             onClick={() => setActiveTab('achievements')}
           >
             <Award size={14} />
-            <span>{tx('Achievements', 'Achievements')} ({badges.length})</span>
+            <span>{tx('Achievements', 'Achievements')}</span>
           </button>
           <button
             type="button"
-            className={`btn btn-sm friend-tab-btn ${activeTab === 'locker' ? 'btn-primary' : 'btn-secondary'}`}
+            role="tab"
+            aria-selected={activeTab === 'locker'}
+            className={`profile-tab-item ${activeTab === 'locker' ? 'active' : ''}`}
             onClick={() => setActiveTab('locker')}
           >
             <Package size={14} />
-            <span>Locker ({lockerItems.length})</span>
+            <span>Locker</span>
           </button>
           {isSelf && (
             <button
               type="button"
-              className={`btn btn-sm friend-tab-btn ${activeTab === 'saved' ? 'btn-primary' : 'btn-secondary'}`}
+              role="tab"
+              aria-selected={activeTab === 'saved'}
+              className={`profile-tab-item ${activeTab === 'saved' ? 'active' : ''}`}
               onClick={() => setActiveTab('saved')}
             >
               <Bookmark size={14} />
-              <span>{tx('Saves', 'Saves')} ({savedTracks.length})</span>
+              <span>{tx('Saves', 'Saves')}</span>
             </button>
           )}
           <button
             type="button"
-            className={`btn btn-sm friend-tab-btn ${activeTab === 'history' ? 'btn-primary' : 'btn-secondary'}`}
+            role="tab"
+            aria-selected={activeTab === 'history'}
+            className={`profile-tab-item ${activeTab === 'history' ? 'active' : ''}`}
             onClick={() => setActiveTab('history')}
           >
             <History size={14} />
-            <span>{tx('History', 'Riwayat')} ({histories.length})</span>
+            <span>{tx('History', 'Riwayat')}</span>
           </button>
           {spotifyShowcase && (
             <button
               type="button"
-              className={`btn btn-sm friend-tab-btn ${activeTab === 'spotify' ? 'btn-primary' : 'btn-secondary'}`}
+              role="tab"
+              aria-selected={activeTab === 'spotify'}
+              className={`profile-tab-item ${activeTab === 'spotify' ? 'active' : ''}`}
               onClick={() => setActiveTab('spotify')}
             >
               <Disc3 size={14} />

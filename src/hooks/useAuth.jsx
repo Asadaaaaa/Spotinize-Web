@@ -25,6 +25,30 @@ function isJwtMalformedOrExpired(token) {
   }
 }
 
+const BROWSER_ID_KEY = 'spotinize_browser_id';
+const GUEST_TOKEN_KEY = 'spotinize_guest_token';
+const GUEST_DAILY_PLAYED_KEY = 'spotinize_guest_daily_played_date';
+
+function getTodayWibString() {
+  const wib = new Date(Date.now() + 7 * 3600 * 1000);
+  return wib.toISOString().slice(0, 10);
+}
+
+function getOrCreateBrowserId() {
+  try {
+    let id = localStorage.getItem(BROWSER_ID_KEY);
+    if (!id) {
+      id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? `br_${crypto.randomUUID()}`
+        : `br_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(BROWSER_ID_KEY, id);
+    }
+    return id;
+  } catch (e) {
+    return `br_${Date.now().toString(36)}`;
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
@@ -36,6 +60,8 @@ export function AuthProvider({ children }) {
     }
   });
   const [token, setToken] = useState(() => localStorage.getItem('spotinize_token') || null);
+  const [guestToken, setGuestToken] = useState(() => localStorage.getItem(GUEST_TOKEN_KEY) || null);
+  const [hasGuestPlayedDaily, setHasGuestPlayedDaily] = useState(() => localStorage.getItem(GUEST_DAILY_PLAYED_KEY) === getTodayWibString());
   const [isLoading, setIsLoading] = useState(false);
   const [isAuthChecking, setIsAuthChecking] = useState(() =>
     Boolean(localStorage.getItem('spotinize_token') || localStorage.getItem('spotinize_user'))
@@ -44,8 +70,10 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     setUser(null);
     setToken(null);
+    setGuestToken(null);
     localStorage.removeItem('spotinize_user');
     localStorage.removeItem('spotinize_token');
+    localStorage.removeItem(GUEST_TOKEN_KEY);
     try {
       sessionStorage.removeItem('spotinize_active_session');
     } catch (e) {}
@@ -113,9 +141,12 @@ export function AuthProvider({ children }) {
       const data = await ApiClient.post('/auth/register', { username, password, displayName });
       setUser(data.user);
       setToken(data.token);
+      setGuestToken(null);
       setIsAuthChecking(false);
       localStorage.setItem('spotinize_user', JSON.stringify(data.user));
       localStorage.setItem('spotinize_token', data.token);
+      localStorage.removeItem(GUEST_TOKEN_KEY);
+      ApiClient.clearCache();
       socketService.refreshAuth();
       return data;
     } finally {
@@ -129,9 +160,12 @@ export function AuthProvider({ children }) {
       const data = await ApiClient.post('/auth/login', { username, password });
       setUser(data.user);
       setToken(data.token);
+      setGuestToken(null);
       setIsAuthChecking(false);
       localStorage.setItem('spotinize_user', JSON.stringify(data.user));
       localStorage.setItem('spotinize_token', data.token);
+      localStorage.removeItem(GUEST_TOKEN_KEY);
+      ApiClient.clearCache();
       socketService.refreshAuth();
       return data;
     } finally {
@@ -180,22 +214,64 @@ export function AuthProvider({ children }) {
     }
   }, [logout]);
 
+  const loginAsGuest = async () => {
+    setIsLoading(true);
+    try {
+      const browserId = getOrCreateBrowserId();
+      const existingGuestToken = localStorage.getItem(GUEST_TOKEN_KEY);
+      const data = await ApiClient.post('/auth/guest', { browserId, guestToken: existingGuestToken });
+      const nextToken = data?.guestToken || existingGuestToken || `gt_${browserId}`;
+      localStorage.setItem(BROWSER_ID_KEY, data?.browserId || browserId);
+      localStorage.setItem(GUEST_TOKEN_KEY, nextToken);
+      if (data?.hasPlayedDaily) {
+        localStorage.setItem(GUEST_DAILY_PLAYED_KEY, getTodayWibString());
+        setHasGuestPlayedDaily(true);
+      } else {
+        localStorage.removeItem(GUEST_DAILY_PLAYED_KEY);
+        setHasGuestPlayedDaily(false);
+      }
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem('spotinize_user');
+      localStorage.removeItem('spotinize_token');
+      setGuestToken(nextToken);
+      setIsAuthChecking(false);
+      ApiClient.clearCache();
+      return data;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const markGuestDailyPlayed = useCallback(() => {
+    try {
+      localStorage.setItem(GUEST_DAILY_PLAYED_KEY, getTodayWibString());
+    } catch (e) {}
+    setHasGuestPlayedDaily(true);
+  }, []);
+
   const updateUser = (updatedUser) => {
     setUser(updatedUser);
     localStorage.setItem('spotinize_user', JSON.stringify(updatedUser));
   };
+
+  const isGuest = Boolean(!user && guestToken);
 
   return (
     <AuthContext.Provider value={{
       user,
       token,
       isAuthenticated: !!user,
+      isGuest,
+      hasGuestPlayedDaily,
+      markGuestDailyPlayed,
       requireSpotifyConnect: false,
       rawUser: user,
       isLoading,
       isAuthChecking,
       register,
       login,
+      loginAsGuest,
       connectSpotify,
       setAuthSession,
       logout,

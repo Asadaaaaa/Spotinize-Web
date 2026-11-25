@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Trophy, RotateCcw, Share2, Swords, Check, Loader2, Sparkles, Music, Shield, Copy } from 'lucide-react';
+import { Trophy, RotateCcw, Share2, Swords, Check, Loader2, Sparkles, Music, Shield, Copy, UserPlus } from 'lucide-react';
 import Button from '../../components/Button.jsx';
 import Card from '../../components/Card.jsx';
 import ShareInstagramModal from '../../components/ShareInstagramModal.jsx';
@@ -9,9 +9,11 @@ import { RankedTierBadge } from '../../components/ItemRarityBadge.jsx';
 import ApiClient from '../../services/api.js';
 import soundFx from '../../services/soundFx.js';
 import haptics from '../../services/haptics.js';
+import { useAuth } from '../../hooks/useAuth.jsx';
 import { useLanguage } from '../../hooks/useLanguage.jsx';
 
 export function FinalResultPage({ gameState, user, onPlayAgain }) {
+  const { isGuest, markGuestDailyPlayed } = useAuth();
   const { tx, tCategory } = useLanguage();
   const [showShareModal, setShowShareModal] = useState(false);
   const [sharingChallenge, setSharingChallenge] = useState(false);
@@ -31,6 +33,9 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
   const isWinner = myRank === 1;
 
   useEffect(() => {
+    if (isGuest) {
+      markGuestDailyPlayed?.();
+    }
     soundFx.playVictory();
     haptics.victory();
     // Launch celebratory confetti
@@ -97,6 +102,42 @@ export function FinalResultPage({ gameState, user, onPlayAgain }) {
             {tx('Category:', 'Kategori:')} {tCategory(gameState?.category)}
           </span>
         </Card>
+
+        {isGuest && (
+          <Card style={{
+            width: '100%',
+            backgroundColor: '#13141a',
+            border: '1px solid rgba(29, 185, 84, 0.35)',
+            padding: '16px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            textAlign: 'left'
+          }}>
+            <div style={{ minWidth: 0, flex: '1 1 220px' }}>
+              <div style={{ fontSize: '0.92rem', fontWeight: 900, color: '#ffffff' }}>
+                {tx('Enjoyed Spotinize Daily?', 'Suka Main Spotinize Daily?')}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                {tx(
+                  'Create a free account to unlock all modes, save your future scores, and climb the Leaderboard.',
+                  'Buat akun gratis untuk membuka semua mode, simpan skor berikutnya, dan masuk Leaderboard.'
+                )}
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<UserPlus size={15} />}
+              onClick={() => window.dispatchEvent(new CustomEvent('spotinize:open-guest-upgrade'))}
+              style={{ fontWeight: 800, whiteSpace: 'nowrap' }}
+            >
+              {tx('Register', 'Daftar')}
+            </Button>
+          </Card>
+        )}
 
         {/* Stats Grid */}
         <div style={{

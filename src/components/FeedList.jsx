@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Loader2, Music2, Plus } from 'lucide-react';
 import ApiClient from '../services/api.js';
 import FeedPostCard from './FeedPostCard.jsx';
 import Avatar from './Avatar.jsx';
-import Button from './Button.jsx';
 import { FeedSkeleton } from './Skeletons.jsx';
 import { useLanguage } from '../hooks/useLanguage.jsx';
+
+const FEED_PAGE_SIZE = 7;
 
 export function FeedList({ user = null, currentUserId, latestCreatedPost = null, onOpenPublicProfile, onPlayChallenge, onOpenComposer }) {
   const { tx } = useLanguage();
@@ -15,11 +16,13 @@ export function FeedList({ user = null, currentUserId, latestCreatedPost = null,
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextOffset, setNextOffset] = useState(0);
+  const sentinelRef = useRef(null);
+  const loadingMoreRef = useRef(false);
 
   const loadFeed = useCallback(async (tabToLoad = activeTab) => {
     try {
       setLoading(true);
-      const res = await ApiClient.get(`/feed?tab=${tabToLoad}&offset=0&limit=15`);
+      const res = await ApiClient.get(`/feed?tab=${tabToLoad}&offset=0&limit=${FEED_PAGE_SIZE}`);
       setPosts(res.posts || []);
       setHasMore(Boolean(res.hasMore));
       setNextOffset(res.nextOffset || 0);
@@ -42,11 +45,12 @@ export function FeedList({ user = null, currentUserId, latestCreatedPost = null,
     });
   }, [latestCreatedPost]);
 
-  const handleLoadMore = async () => {
-    if (loadingMore || !hasMore) return;
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMore) return;
+    loadingMoreRef.current = true;
     try {
       setLoadingMore(true);
-      const res = await ApiClient.get(`/feed?tab=${activeTab}&offset=${nextOffset}&limit=15`);
+      const res = await ApiClient.get(`/feed?tab=${activeTab}&offset=${nextOffset}&limit=${FEED_PAGE_SIZE}`);
       setPosts(prev => {
         const existingIds = new Set(prev.map(p => p.id));
         const fresh = (res.posts || []).filter(p => !existingIds.has(p.id));
@@ -56,9 +60,27 @@ export function FeedList({ user = null, currentUserId, latestCreatedPost = null,
       setNextOffset(res.nextOffset || nextOffset);
     } catch (e) {
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  };
+  }, [activeTab, hasMore, nextOffset]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore || loading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          handleLoadMore();
+        }
+      },
+      { rootMargin: '280px 0px' }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, handleLoadMore]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -80,11 +102,12 @@ export function FeedList({ user = null, currentUserId, latestCreatedPost = null,
         </button>
       </div>
 
-      {/* Post Composer Card Below Explore / Following Tabs */}
-      {onOpenComposer && (
+      {/* Post Composer Card Below Explore / Following Tabs (hidden for Guest) */}
+      {onOpenComposer && currentUserId && (
         <div
           role="button"
           tabIndex={0}
+          className="feed-mobile-composer-card"
           onClick={() => onOpenComposer()}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -98,7 +121,6 @@ export function FeedList({ user = null, currentUserId, latestCreatedPost = null,
             borderRadius: '14px',
             backgroundColor: '#131319',
             border: '1px solid rgba(255,255,255,0.08)',
-            display: 'flex',
             alignItems: 'center',
             gap: '10px',
             cursor: 'pointer'
@@ -182,10 +204,26 @@ export function FeedList({ user = null, currentUserId, latestCreatedPost = null,
           ))}
 
           {hasMore && (
-            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '12px' }}>
-              <Button variant="secondary" size="sm" onClick={handleLoadMore} disabled={loadingMore}>
-                {loadingMore ? <Loader2 size={14} className="spin" /> : tx('Load More', 'Muat Lebih Banyak')}
-              </Button>
+            <div
+              ref={sentinelRef}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '18px 0 8px',
+                minHeight: '44px',
+                color: 'var(--color-text-dim)',
+                fontSize: '0.8rem',
+                fontWeight: 600
+              }}
+            >
+              {loadingMore && (
+                <>
+                  <Loader2 size={18} className="spin" style={{ color: 'var(--color-primary)' }} />
+                  <span>{tx('Loading more posts...', 'Memuat postingan...')}</span>
+                </>
+              )}
             </div>
           )}
         </div>
